@@ -16,21 +16,39 @@ async function checkAiQuota(userId: string): Promise<void> {
   const subscription = await prisma.subscription.findUnique({
     where: { userId },
   });
+
   const plan = subscription?.plan ?? "FREE";
-  const tier = plan === "FREE" ? "basic" : plan === "STARTER" ? "standard" : "advanced";
+  const tier =
+    plan === "FREE"
+      ? "basic"
+      : plan === "STARTER"
+      ? "standard"
+      : "advanced";
+
   const limits = AI_TIER_LIMITS[tier];
+
   const today = new Date().toISOString().split("T")[0];
   const key = cacheKeys.aiUsage(userId, today);
-  const usage = parseInt((await redis.get(key)) ?? "0", 10);
 
-  if (usage >= limits.dailyRequests) {
-    throw Errors.subscriptionLimit(
-      "Daily AI request limit reached. Upgrade your plan for more."
-    );
+  try {
+    const cached = await redis.get(key);
+    const usage = cached ? parseInt(cached, 10) : 0;
+
+    if (usage >= limits.dailyRequests) {
+      throw Errors.subscriptionLimit(
+        "Daily AI request limit reached. Upgrade your plan for more."
+      );
+    }
+
+    // SAFE atomic update (Upstash-friendly)
+    await redis.setex(key, 86400, String(usage + 1));
+  } catch (err) {
+    // IMPORTANT: do NOT crash request if Redis fails
+    console.error("[Redis AI quota error]", err);
+
+    // fallback: allow request (fail-open strategy)
+    return;
   }
-
-  await redis.incr(key);
-  await redis.expire(key, 86400);
 }
 
 async function logAiUsage(

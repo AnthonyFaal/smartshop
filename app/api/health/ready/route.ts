@@ -13,7 +13,6 @@ export async function GET() {
   }
 
   try {
-    if (redis.status !== "ready") await redis.connect();
     await redis.ping();
     checks.redis = "ok";
   } catch {

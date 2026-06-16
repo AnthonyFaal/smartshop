@@ -7,7 +7,7 @@ AI-powered marketplace for Ghana. Built for trust, local commerce, and the UMaT 
 - **Frontend:** Next.js 16, TypeScript, Tailwind CSS, Shadcn UI, TanStack Query, tRPC, Zustand, Framer Motion
 - **Backend:** Next.js Route Handlers, Server Actions, tRPC
 - **Database:** PostgreSQL 16 + Prisma 7
-- **Cache:** Redis
+- **Cache:** Upstash Redis (or local Redis for offline dev)
 - **Storage:** S3-compatible (MinIO for local dev)
 - **AI:** OpenAI-compatible provider
 
@@ -17,7 +17,8 @@ AI-powered marketplace for Ghana. Built for trust, local commerce, and the UMaT 
 
 - Node.js 22+
 - pnpm 10+
-- Docker (for PostgreSQL, Redis, MinIO)
+- Docker (for PostgreSQL and MinIO)
+- Upstash Redis database ([create one free](https://console.upstash.com/))
 
 ### 1. Install dependencies
 
@@ -31,20 +32,38 @@ pnpm install
 cp .env.example .env
 ```
 
-### 3. Start infrastructure
+### 3. Configure Redis (Upstash)
+
+Create a database at [console.upstash.com](https://console.upstash.com/), open the **REST API** section, click **.env**, and copy the values into `.env`:
 
 ```bash
-docker compose up -d postgres redis minio
+UPSTASH_REDIS_REST_URL=https://YOUR_ENDPOINT.upstash.io
+UPSTASH_REDIS_REST_TOKEN=YOUR_TOKEN
 ```
 
-### 4. Initialize database
+Use the REST credentials (not the TCP `rediss://` URL) — they work reliably with Next.js serverless routes.
+
+### 4. Start infrastructure
+
+```bash
+docker compose up -d postgres minio
+```
+
+Optional: run a local Redis container instead of Upstash:
+
+```bash
+docker compose --profile local-redis up -d postgres redis minio
+# and set REDIS_URL=redis://localhost:6379 in .env (leave UPSTASH_REDIS_URL unset)
+```
+
+### 5. Initialize database
 
 ```bash
 pnpm db:push
 pnpm db:seed
 ```
 
-### 5. Run development server
+### 6. Run development server
 
 ```bash
 pnpm dev

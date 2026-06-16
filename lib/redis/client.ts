@@ -1,22 +1,102 @@
-import Redis from "ioredis";
+import { Redis as UpstashRedis } from "@upstash/redis";
+import IoRedis from "ioredis";
 import { env } from "@/lib/config/env";
 
+export interface RedisClient {
+  get(key: string): Promise<string | null>;
+  setex(key: string, seconds: number, value: string): Promise<unknown>;
+  del(...keys: string[]): Promise<unknown>;
+  incr(key: string): Promise<number>;
+  expire(key: string, seconds: number): Promise<unknown>;
+  ttl(key: string): Promise<number>;
+  keys(pattern: string): Promise<string[]>;
+  ping(): Promise<string>;
+}
+
 const globalForRedis = globalThis as unknown as {
-  redis: Redis | undefined;
+  redis: RedisClient | undefined;
 };
 
-function createRedisClient(): Redis {
-  const client = new Redis(env.REDIS_URL, {
+function isUpstashTcp(url: string): boolean {
+  return url.startsWith("rediss://") || url.includes(".upstash.io");
+}
+
+function useUpstashRest(): boolean {
+  return Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
+}
+
+function createUpstashRestClient(): RedisClient {
+  const client = new UpstashRedis({
+    url: env.UPSTASH_REDIS_REST_URL!,
+    token: env.UPSTASH_REDIS_REST_TOKEN!,
+  });
+
+  return {
+    async get(key) {
+      const value = await client.get(key);
+      if (value === null || value === undefined) return null;
+      return typeof value === "string" ? value : JSON.stringify(value);
+    },
+    async setex(key, seconds, value) {
+      await client.set(key, value, { ex: seconds });
+    },
+    async del(...keys) {
+      if (keys.length === 0) return 0;
+      return client.del(...keys);
+    },
+    async incr(key) {
+      return client.incr(key);
+    },
+    async expire(key, seconds) {
+      return client.expire(key, seconds);
+    },
+    async ttl(key) {
+      return client.ttl(key);
+    },
+    async keys(pattern) {
+      return client.keys(pattern);
+    },
+    async ping() {
+      return client.ping();
+    },
+  };
+}
+
+function createIoRedisClient(): RedisClient {
+  const client = new IoRedis(env.REDIS_URL, {
     maxRetriesPerRequest: 3,
     lazyConnect: true,
     enableReadyCheck: true,
+    ...(isUpstashTcp(env.REDIS_URL) && { family: 0 }),
   });
 
   client.on("error", (err) => {
-    console.error("[Redis] Connection error:", err.message);
+    console.error("[Redis] Connection error:", err.message || String(err));
   });
 
-  return client;
+  return {
+    get: (key) => client.get(key),
+    setex: (key, seconds, value) => client.setex(key, seconds, value),
+    del: (...keys) => (keys.length ? client.del(...keys) : Promise.resolve(0)),
+    incr: (key) => client.incr(key),
+    expire: (key, seconds) => client.expire(key, seconds),
+    ttl: (key) => client.ttl(key),
+    keys: (pattern) => client.keys(pattern),
+    ping: async () => {
+      if (client.status !== "ready") await client.connect();
+      return client.ping();
+    },
+  };
+}
+
+function createRedisClient(): RedisClient {
+  if (useUpstashRest()) {
+    console.info("[Redis] Using Upstash REST client");
+    return createUpstashRestClient();
+  }
+
+  console.info(`[Redis] Using ioredis at ${env.REDIS_URL.replace(/:[^:@]+@/, ":***@")}`);
+  return createIoRedisClient();
 }
 
 export const redis = globalForRedis.redis ?? createRedisClient();
@@ -26,8 +106,7 @@ if (env.NODE_ENV !== "production") {
 }
 
 export async function connectRedis(): Promise<void> {
-  if (redis.status === "ready") return;
-  await redis.connect();
+  await redis.ping();
 }
 
 export const cacheKeys = {
