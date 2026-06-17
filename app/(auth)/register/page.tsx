@@ -29,6 +29,9 @@ const registerSchema = z.object({
     .regex(/[A-Z]/, "Include an uppercase letter")
     .regex(/[a-z]/, "Include a lowercase letter")
     .regex(/[0-9]/, "Include a number"),
+  acceptTerms: z.boolean().refine((v) => v, {
+    message: "You must accept the Terms of Service",
+  }),
 });
 
 type RegisterForm = z.infer<typeof registerSchema>;
@@ -44,13 +47,18 @@ export default function RegisterPage() {
     formState: { errors },
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
+    defaultValues: { acceptTerms: false },
   });
 
   const registerMutation = trpc.auth.register.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       await utils.auth.me.invalidate();
       toast.success("Account created successfully!");
-      router.push("/marketplace");
+      if (data.phone && !data.phoneVerified) {
+        router.push("/settings");
+      } else {
+        router.push("/marketplace");
+      }
     },
     onError: (error) => {
       toast.error(error.message);
@@ -63,6 +71,7 @@ export default function RegisterPage() {
     registerMutation.mutate({
       ...data,
       phone: data.phone || undefined,
+      acceptTerms: true,
     });
   };
 
@@ -103,7 +112,7 @@ export default function RegisterPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone (optional)</Label>
+                <Label htmlFor="phone">Phone (recommended)</Label>
                 <Input id="phone" type="tel" placeholder="+233XXXXXXXXX" {...register("phone")} />
                 {errors.phone && (
                   <p className="text-sm text-red-600" role="alert">{errors.phone.message}</p>
@@ -116,6 +125,27 @@ export default function RegisterPage() {
                   <p className="text-sm text-red-600" role="alert">{errors.password.message}</p>
                 )}
               </div>
+              <div className="flex items-start gap-2">
+                <input
+                  id="acceptTerms"
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-zinc-300"
+                  {...register("acceptTerms")}
+                />
+                <Label htmlFor="acceptTerms" className="text-sm font-normal leading-snug text-zinc-600">
+                  I agree to the{" "}
+                  <Link href="/terms" className="text-emerald-600 hover:underline" target="_blank">
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="text-emerald-600 hover:underline" target="_blank">
+                    Privacy Policy
+                  </Link>
+                </Label>
+              </div>
+              {errors.acceptTerms && (
+                <p className="text-sm text-red-600" role="alert">{errors.acceptTerms.message}</p>
+              )}
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Creating account..." : "Create account"}
               </Button>

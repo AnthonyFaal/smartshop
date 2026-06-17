@@ -18,11 +18,15 @@ export const authRouter = createTRPCRouter({
         firstName: z.string().min(1).max(100),
         lastName: z.string().min(1).max(100),
         phone: z.string().optional(),
+        acceptTerms: z.boolean().refine((v) => v, {
+          message: "You must accept the Terms of Service",
+        }),
       })
     )
     .mutation(async ({ input, ctx }) => {
+      const { acceptTerms: _, ...registerInput } = input;
       const result = await authService.registerUser({
-        ...input,
+        ...registerInput,
         userAgent: ctx.userAgent,
         ipAddress: ctx.ip,
       });
@@ -30,6 +34,8 @@ export const authRouter = createTRPCRouter({
         id: result.user.id,
         email: result.user.email,
         role: result.user.role,
+        phone: result.user.phone,
+        phoneVerified: result.user.phoneVerified,
       };
     }),
 
@@ -71,6 +77,7 @@ export const authRouter = createTRPCRouter({
         role: true,
         phone: true,
         phoneVerified: true,
+        emailVerified: true,
         verificationLevel: true,
         profile: true,
         subscription: { select: { plan: true, status: true } },
@@ -110,6 +117,49 @@ export const authRouter = createTRPCRouter({
       await authService.verifyOtp({
         ...input,
         userId: ctx.user.id,
+      });
+      return { success: true };
+    }),
+
+  forgotPassword: publicProcedure
+    .use(withErrorHandling)
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ input }) => {
+      await authService.requestPasswordReset(input.email);
+      return {
+        success: true,
+        message:
+          "If an account exists with that email, a reset code has been sent.",
+      };
+    }),
+
+  resetPassword: publicProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        email: z.string().email(),
+        code: z.string().length(6),
+        password: z.string().min(8),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await authService.resetPassword(input);
+      return { success: true };
+    }),
+
+  changePassword: protectedProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        currentPassword: z.string().min(1),
+        newPassword: z.string().min(8),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await authService.changePassword({
+        userId: ctx.user.id,
+        currentPassword: input.currentPassword,
+        newPassword: input.newPassword,
       });
       return { success: true };
     }),

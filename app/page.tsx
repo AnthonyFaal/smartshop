@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ArrowRight, Shield, Sparkles, MapPin, Star } from "lucide-react";
+import { Shield, Sparkles, MapPin, Star } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
-import { Button } from "@/components/ui/button";
+import { VerificationBanner } from "@/components/auth/verification-banner";
+import { LandingHeroCTA, LandingBottomCTA } from "@/components/marketing/landing-cta";
 
 const features = [
   {
@@ -35,6 +36,7 @@ export default function LandingPage() {
   return (
     <div className="flex min-h-full flex-col">
       <Header />
+      <VerificationBanner />
       <main className="flex-1">
         <section className="relative overflow-hidden bg-gradient-to-b from-emerald-50 to-white px-4 py-20 sm:px-6 lg:py-32">
           <div className="mx-auto max-w-7xl">
@@ -51,17 +53,7 @@ export default function LandingPage() {
                 SmartShop connects verified buyers and sellers with AI assistance,
                 secure payments in GHS, and a trust system designed for local commerce.
               </p>
-              <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <Button size="lg" asChild>
-                  <Link href="/marketplace">
-                    Browse Marketplace
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link href="/seller/verify">Start Selling</Link>
-                </Button>
-              </div>
+              <LandingHeroCTA />
             </div>
           </div>
         </section>
@@ -95,20 +87,7 @@ export default function LandingPage() {
 
         <section className="bg-emerald-600 px-4 py-20 sm:px-6">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-3xl font-bold text-white">
-              Ready to buy or sell?
-            </h2>
-            <p className="mt-4 text-lg text-emerald-100">
-              Join thousands of UMaT students trading safely on SmartShop.
-            </p>
-            <Button
-              size="lg"
-              variant="secondary"
-              className="mt-8"
-              asChild
-            >
-              <Link href="/register">Create free account</Link>
-            </Button>
+            <LandingBottomCTA />
           </div>
         </section>
       </main>

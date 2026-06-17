@@ -8,6 +8,8 @@ const authRoutes = ["/login", "/register"];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const accessToken = request.cookies.get("smartshop_access")?.value;
+  const refreshToken = request.cookies.get("smartshop_refresh")?.value;
+  const hasSession = Boolean(accessToken || refreshToken);
 
   const isProtected = protectedRoutes.some((route) =>
     pathname.startsWith(route)
@@ -15,13 +17,13 @@ export function middleware(request: NextRequest) {
   const isAdmin = adminRoutes.some((route) => pathname.startsWith(route));
   const isAuth = authRoutes.some((route) => pathname.startsWith(route));
 
-  if ((isProtected || isAdmin) && !accessToken) {
+  if ((isProtected || isAdmin) && !hasSession) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuth && accessToken) {
+  if (isAuth && hasSession) {
     return NextResponse.redirect(new URL("/marketplace", request.url));
   }
 

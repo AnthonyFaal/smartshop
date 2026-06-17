@@ -125,30 +125,33 @@ export async function clearAuthCookies(): Promise<void> {
 export async function getSessionUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
-  if (!accessToken) return null;
 
-  try {
-    const payload = await verifyAccessToken(accessToken);
-    const user = await prisma.user.findFirst({
-      where: {
-        id: payload.sub,
-        isActive: true,
-        isSuspended: false,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        phone: true,
-        phoneVerified: true,
-        verificationLevel: true,
-      },
-    });
-    return user;
-  } catch {
-    return null;
+  if (accessToken) {
+    try {
+      const payload = await verifyAccessToken(accessToken);
+      const user = await prisma.user.findFirst({
+        where: {
+          id: payload.sub,
+          isActive: true,
+          isSuspended: false,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          phone: true,
+          phoneVerified: true,
+          verificationLevel: true,
+        },
+      });
+      if (user) return user;
+    } catch {
+      // Access token expired — fall through to refresh
+    }
   }
+
+  return refreshSession();
 }
 
 export async function refreshSession(): Promise<SessionUser | null> {

@@ -119,6 +119,7 @@ export const cacheKeys = {
   search: (hash: string) => `search:${hash}`,
   userCart: (userId: string) => `cart:${userId}`,
   aiUsage: (userId: string, date: string) => `ai:usage:${userId}:${date}`,
+  passwordReset: (userId: string) => `pwd-reset:${userId}`,
 } as const;
 
 export async function cacheGet<T>(key: string): Promise<T | null> {

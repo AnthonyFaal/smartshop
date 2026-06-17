@@ -5,6 +5,8 @@ import { httpBatchLink } from "@trpc/client";
 import { useState } from "react";
 import superjson from "superjson";
 import { trpc } from "@/lib/trpc/client";
+import type { AuthUser } from "@/lib/auth/get-auth-user";
+import { AuthInitialProvider } from "@/components/providers/auth-provider";
 
 function getBaseUrl() {
   if (typeof window !== "undefined") return "";
@@ -12,13 +14,19 @@ function getBaseUrl() {
   return `http://localhost:${process.env.PORT ?? 3000}`;
 }
 
-export function TRPCProvider({ children }: { children: React.ReactNode }) {
+export function TRPCProvider({
+  children,
+  initialAuthUser = null,
+}: {
+  children: React.ReactNode;
+  initialAuthUser?: AuthUser | null;
+}) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            staleTime: 60_000,
             refetchOnWindowFocus: false,
           },
         },
@@ -43,8 +51,10 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    </trpc.Provider>
+    <AuthInitialProvider initialUser={initialAuthUser ?? null}>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </trpc.Provider>
+    </AuthInitialProvider>
   );
 }

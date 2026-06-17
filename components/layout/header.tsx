@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart, Heart, MessageCircle, User, Store, Shield } from "lucide-react";
+import { ShoppingCart, Heart, MessageCircle, User, Store } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import { useInitialAuthUser } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function Header() {
-  const { data: user } = trpc.auth.me.useQuery();
+  const initialUser = useInitialAuthUser();
+  const { data: user } = trpc.auth.me.useQuery(undefined, {
+    initialData: initialUser ?? undefined,
+    staleTime: 60_000,
+  });
+
+  const isLoading = initialUser === undefined && user === undefined;
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
@@ -35,7 +43,12 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {user ? (
+          {isLoading ? (
+            <>
+              <Skeleton className="h-9 w-16" />
+              <Skeleton className="h-9 w-24" />
+            </>
+          ) : user ? (
             <>
               <Button variant="ghost" size="icon" asChild>
                 <Link href="/wishlist" aria-label="Wishlist">
@@ -53,7 +66,7 @@ export function Header() {
                 </Link>
               </Button>
               <Button variant="ghost" size="icon" asChild>
-                <Link href="/settings" aria-label="Settings">
+                <Link href="/settings" aria-label="Account settings">
                   <User className="h-5 w-5" />
                 </Link>
               </Button>

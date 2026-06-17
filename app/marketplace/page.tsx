@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
+import { VerificationBanner } from "@/components/auth/verification-banner";
 import { ProductGrid } from "@/components/marketplace/product-grid";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export default function MarketplacePage() {
   return (
     <div className="flex min-h-full flex-col">
       <Header />
+      <VerificationBanner />
       <main className="flex-1">
         <div className="border-b border-zinc-200 bg-white">
           <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
