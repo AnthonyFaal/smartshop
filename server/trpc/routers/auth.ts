@@ -147,6 +147,18 @@ export const authRouter = createTRPCRouter({
       return { success: true };
     }),
 
+  resendResetCode: publicProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        email: z.string().email(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const result = await authService.resendPasswordResetCode(input.email);
+      return result;
+    }),
+
   changePassword: protectedProcedure
     .use(withErrorHandling)
     .input(

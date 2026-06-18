@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+
+
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -42,12 +43,51 @@ export default function ResetPasswordPage() {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
+    watch,
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       email: searchParams.get("email") ?? "",
     },
   });
+
+  useEffect(() => {
+    const emailFromQuery = searchParams.get("email") ?? "";
+    if (emailFromQuery) setValue("email", emailFromQuery, { shouldValidate: false });
+  }, [searchParams, setValue]);
+
+  const watchEmail = watch("email");
+
+
+
+
+
+  const resendResetCode = trpc.auth.resendResetCode.useMutation({
+    onSuccess: (data) => {
+      toast.success("A new reset code was sent");
+      setNextAllowedAt((data as { nextAllowedAt: number }).nextAllowedAt);
+    },
+    onError: (error) => {
+    toast.error(error.message);
+  },
+  });
+
+  const [nextAllowedAt, setNextAllowedAt] = useState<number>(Date.now());
+  const [nowTick, setNowTick] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const secondsLeft = Math.max(
+    0,
+    Math.ceil((nextAllowedAt - nowTick) / 1000)
+  );
+
+
+  const canResend = secondsLeft <= 0 && !resendResetCode.isPending;
 
   const resetPassword = trpc.auth.resetPassword.useMutation({
     onSuccess: () => {
@@ -120,11 +160,35 @@ export default function ResetPasswordPage() {
                 {isLoading ? "Updating..." : "Update password"}
               </Button>
             </form>
-            <p className="mt-6 text-center text-sm text-zinc-500">
-              <Link href="/forgot-password" className="font-medium text-emerald-600 hover:underline">
-                Request a new code
-              </Link>
-            </p>
+            <div className="mt-6 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+              <p className="text-center text-sm text-zinc-600">
+                Didn&apos;t get the code? You can request a new one.
+              </p>
+
+              <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={!canResend || !watchEmail}
+                  onClick={() =>
+                    resendResetCode.mutate({
+                      email: watchEmail!,
+                    })
+                  }
+                >
+                  {resendResetCode.isPending
+                    ? "Sending..."
+                    : secondsLeft > 0
+                      ? `Resend in ${secondsLeft}s`
+                      : "Resend code"}
+                </Button>
+
+                <div className="text-xs text-zinc-500" aria-live="polite">
+                  {secondsLeft > 0 ? `Please wait ${secondsLeft} seconds.` : "You can resend now."}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </main>

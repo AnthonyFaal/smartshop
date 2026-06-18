@@ -1,0 +1,5 @@
+- [ ] Standardize notification message bodies in `server/services/auth.service.ts` for OTP/password reset/change/verification
+- [ ] Ensure message formatting is consistent, professional, and production-safe
+- [ ] Remove hardcoded “10 minutes” and derive expiry text from `OTP_EXPIRY_SECONDS`
+- [ ] Replace all existing `body:` strings in auth notifications with the standardized versions
+- [ ] Run lint/tests to confirm build passes

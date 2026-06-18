@@ -10,7 +10,13 @@ import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { trpc } from "@/lib/trpc/client";
 
 const schema = z.object({
@@ -22,19 +28,18 @@ type FormData = z.infer<typeof schema>;
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    getValues,
-  } = useForm<FormData>({
-    resolver: zodResolver(schema),
-  });
+  const { register, handleSubmit, formState: { errors }, getValues } =
+    useForm<FormData>({
+      resolver: zodResolver(schema),
+    });
 
   const forgotPassword = trpc.auth.forgotPassword.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       setSent(true);
-      toast.success("If an account exists, a reset code was sent.");
+      toast.success(
+        data.message ??
+          ""
+      );
     },
     onError: (error) => toast.error(error.message),
   });
@@ -54,21 +59,31 @@ export default function ForgotPasswordPage() {
               Enter your email and we&apos;ll send a 6-digit reset code
             </CardDescription>
           </CardHeader>
+
           <CardContent>
             {sent ? (
               <div className="space-y-4 text-center">
                 <p className="text-sm text-zinc-600">
-                  Check your email (and phone if verified) for a reset code.
-                  In development, the code is also printed in the server console.
+                 we’ve sent you a 6-digit reset code.
+                  Please check your inbox.
                 </p>
+
                 <Button asChild className="w-full">
-                  <Link href={`/reset-password?email=${encodeURIComponent(getValues("email"))}`}>
+                  <Link
+                    href={`/reset-password?email=${encodeURIComponent(
+                      getValues("email")
+                    )}`}
+                  >
                     Enter reset code
                   </Link>
                 </Button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+              <form
+                onSubmit={handleSubmit(onSubmit)}
+                className="space-y-4"
+                noValidate
+              >
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -79,17 +94,28 @@ export default function ForgotPasswordPage() {
                     aria-invalid={!!errors.email}
                   />
                   {errors.email && (
-                    <p className="text-sm text-red-600" role="alert">{errors.email.message}</p>
+                    <p className="text-sm text-red-600" role="alert">
+                      {errors.email.message}
+                    </p>
                   )}
                 </div>
-                <Button type="submit" className="w-full" disabled={forgotPassword.isPending}>
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={forgotPassword.isPending}
+                >
                   {forgotPassword.isPending ? "Sending..." : "Send reset code"}
                 </Button>
               </form>
             )}
+
             <p className="mt-6 text-center text-sm text-zinc-500">
               Remember your password?{" "}
-              <Link href="/login" className="font-medium text-emerald-600 hover:underline">
+              <Link
+                href="/login"
+                className="font-medium text-emerald-600 hover:underline"
+              >
                 Sign in
               </Link>
             </p>
@@ -99,3 +125,4 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
+

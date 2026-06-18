@@ -5,6 +5,7 @@ import {
   type NotificationType,
 } from "@prisma/client";
 import { env } from "@/lib/config/env";
+import nodemailer from "nodemailer";
 
 export interface CreateNotificationInput {
   userId: string;
@@ -15,17 +16,35 @@ export interface CreateNotificationInput {
   channels?: NotificationChannel[];
 }
 
-async function sendEmail(
-  to: string,
-  subject: string,
-  body: string
-): Promise<void> {
-  if (!env.SMTP_HOST) {
+async function sendEmail(to: string, subject: string, body: string) {
+  // In dev/test without SMTP configured, we only log.
+  if (!env.SMTP_HOST || !env.SMTP_USER) {
     console.info(`[Email] Would send to ${to}: ${subject}`);
     return;
   }
-  // Production SMTP integration via nodemailer can be added when credentials are configured
-  console.info(`[Email] Sent to ${to}: ${subject}`);
+
+  const transport = nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: true,
+    auth: {
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASSWORD,
+    },
+  });
+
+  try {
+    await transport.sendMail({
+      from: env.SMTP_FROM,
+      to,
+      subject,
+      text: body,
+    });
+  } catch (err) {
+    // Do not fail the auth flow due to mail server issues.
+    // Also avoids leaking account existence; the TRPC endpoint should still succeed.
+    console.error("[Email] sendMail failed:", err);
+  }
 }
 
 async function sendSms(to: string, message: string): Promise<void> {
@@ -33,6 +52,8 @@ async function sendSms(to: string, message: string): Promise<void> {
     console.info(`[SMS] Would send to ${to}: ${message}`);
     return;
   }
+
+  // TODO: integrate SMS provider. Keeping current stub.
   console.info(`[SMS] Sent to ${to}`);
 }
 
@@ -62,6 +83,7 @@ export async function createNotification(
   if (!user) return;
 
   if (channels.includes("EMAIL")) {
+    // Email sending failures should not fail the reset-request flow.
     await sendEmail(user.email, input.title, input.body);
   }
 
@@ -86,3 +108,4 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
     data: { isRead: true, readAt: new Date() },
   });
 }
+

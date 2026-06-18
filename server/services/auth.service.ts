@@ -10,9 +10,31 @@ import { Errors } from "@/server/errors";
 import { createNotification } from "@/lib/notifications/service";
 import type { OtpPurpose } from "@prisma/client";
 import { randomInt } from "crypto";
+import { env } from "@/lib/config/env";
+
+const APP_NAME = env.APP_NAME || "SmartShop";
 
 const OTP_EXPIRY_SECONDS = 600;
 const OTP_MAX_ATTEMPTS = 5;
+
+function formatExpiryText(expiresInSeconds: number) {
+  const minutes = Math.ceil(expiresInSeconds / 60);
+  return minutes <= 1 ? "1 minute" : `${minutes} minutes`;
+}
+
+function formatSecurityReminder() {
+  return "Do not share this code with anyone. If you didn't request it, please ignore this message and contact support if needed.";
+}
+
+
+function normalizeMessageBody(body: string) {
+  return body
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim();
+}
+
 
 export async function registerUser(input: {
   email: string;
@@ -174,8 +196,13 @@ export async function sendOtp(input: {
     await createNotification({
       userId: input.userId,
       type: "VERIFICATION",
-      title: "Verification Code",
-      body: `Your SmartShop code is ${code}. Valid for 10 minutes.`,
+      title: "Your verification code",
+      body: normalizeMessageBody(`
+        Your ${APP_NAME} verification code is ${code}.
+        This code will expire in ${formatExpiryText(OTP_EXPIRY_SECONDS)}.
+
+        ${formatSecurityReminder()}
+      `),
       channels: ["SMS", "IN_APP"],
     });
   }
@@ -211,13 +238,65 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await createNotification({
     userId: user.id,
     type: "VERIFICATION",
-    title: "Password Reset Code",
-    body: `Your SmartShop password reset code is ${code}. Valid for 10 minutes.`,
+    title: "Password Reset request",
+    body: normalizeMessageBody(`
+      We received a request to reset your ${APP_NAME} account password.
+
+      Your verification code is ${code}.
+      This code will expire in ${formatExpiryText(OTP_EXPIRY_SECONDS)}.
+
+      ${formatSecurityReminder()}
+    `),
+
     channels: user.phone ? ["SMS", "EMAIL", "IN_APP"] : ["EMAIL", "IN_APP"],
   });
 
   console.info(`[Password Reset] Code for ${email}: ${code}`);
 }
+
+export async function resendPasswordResetCode(email: string): Promise<{
+  success: true;
+  nextAllowedAt: number;
+}> {
+  const normalizedEmail = email.toLowerCase();
+  const user = await prisma.user.findFirst({
+    where: { email: normalizedEmail, deletedAt: null, isActive: true },
+    select: { id: true },
+  });
+
+  // Do not reveal existence.
+  const identifier = user?.id ?? normalizedEmail;
+
+  // Cooldown: 30 seconds before resend.
+  const COOLDOWN_SECONDS = 30;
+  const cooldownKeyIdentifier = identifier;
+
+  const cooldownTtl = await redis.ttl(
+    cacheKeys.otpCooldown(cooldownKeyIdentifier, "PASSWORD_RESET")
+  );
+
+  if (cooldownTtl > 0) {
+    return {
+      success: true,
+      nextAllowedAt: Date.now() + cooldownTtl * 1000,
+    };
+  }
+
+  // Set cooldown marker first to prevent race resend abuse.
+  await redis.setex(
+    cacheKeys.otpCooldown(cooldownKeyIdentifier, "PASSWORD_RESET"),
+    COOLDOWN_SECONDS,
+    String(Date.now() + COOLDOWN_SECONDS * 1000)
+  );
+
+  await requestPasswordReset(normalizedEmail);
+
+  return {
+    success: true,
+    nextAllowedAt: Date.now() + COOLDOWN_SECONDS * 1000,
+  };
+}
+
 
 export async function resetPassword(input: {
   email: string;
@@ -292,8 +371,12 @@ export async function resetPassword(input: {
   await createNotification({
     userId: user.id,
     type: "SYSTEM",
-    title: "Password Updated",
-    body: "Your SmartShop password was changed successfully.",
+    title: "Password updated successfully",
+    body: normalizeMessageBody(`
+      Your ${APP_NAME} account password has been changed successfully.
+
+      If you didn’t authorize this change, please contact support immediately to help secure your account.
+    `),
     channels: ["IN_APP", "EMAIL"],
   });
 }
@@ -337,8 +420,12 @@ export async function changePassword(input: {
   await createNotification({
     userId: user.id,
     type: "SYSTEM",
-    title: "Password Changed",
-    body: "Your password was updated. Contact support if you did not make this change.",
+    title: "Password Updated",
+    body: normalizeMessageBody(`
+      Your password has been updated successfully.
+
+      If you didn’t make this change, please contact support immediately.
+    `),
     channels: ["IN_APP", "EMAIL"],
   });
 }
@@ -405,15 +492,27 @@ export async function verifyOtp(input: {
   const notificationByPurpose = {
     PHONE_VERIFICATION: {
       title: "Phone Verified",
-      body: "Your phone number has been successfully verified.",
+      body: normalizeMessageBody(`
+        Your phone number has been successfully verified and linked to your ${APP_NAME} account.
+
+        If you didn’t authorize this action, please contact support immediately.
+      `),
     },
     PASSWORD_RESET: {
       title: "Verification Complete",
-      body: "You can now set a new password.",
+      body: normalizeMessageBody(`
+        Your phone verification is complete.
+
+        You can now set a new password.
+      `),
     },
     LOGIN: {
       title: "Login Verified",
-      body: "Phone verification for login was successful.",
+      body: normalizeMessageBody(`
+        Phone verification for login was successful.
+
+        You can continue to your account.
+      `),
     },
   } as const;
 
