@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Package, TrendingUp, AlertCircle } from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
+import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import { trpc } from "@/lib/trpc/client";
 import { useInitialAuthUser } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -58,35 +59,84 @@ export default function SellerDashboardPage() {
 
   return (
     <PageShell showVerificationBanner>
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-        <h1 className="text-2xl font-bold text-zinc-900">Seller Dashboard</h1>
-        <p className="mt-1 text-sm text-zinc-500">Manage your store and listings</p>
+      <SellerPageShell>
+        <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-900">
+                Seller Dashboard
+              </h1>
+              <p className="mt-1 text-sm text-zinc-500">
+                Manage your store and listings
+              </p>
+            </div>
 
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Package className="h-5 w-5" />
-                Products
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-zinc-600">Product management is coming in the next pilot release.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <TrendingUp className="h-5 w-5" />
-                Analytics
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-zinc-600">Sales insights and trust score trends will appear here.</p>
-            </CardContent>
-          </Card>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild>
+                <Link href="/seller/products/new">Add Product</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/seller/subscription">Upgrade Plan</Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { title: "Total Revenue", icon: Package },
+              { title: "Pending Escrow", icon: Package },
+              { title: "Available Balance", icon: Package },
+              { title: "Orders Today", icon: Package },
+              { title: "Products Live", icon: Package },
+              { title: "Conversion Rate", icon: TrendingUp },
+              { title: "Trust Score", icon: TrendingUp },
+              { title: "Subscription Status", icon: TrendingUp },
+              { title: "Verification Status", icon: TrendingUp },
+            ].map((item) => (
+              <Card key={item.title}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <item.icon className="h-5 w-5 text-zinc-600" />
+                    {item.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="h-6 w-24 animate-pulse rounded bg-zinc-100" />
+                    <div className="h-4 w-32 animate-pulse rounded bg-zinc-100" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Recent Reviews</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="h-12 w-full animate-pulse rounded bg-zinc-100" />
+                  <div className="h-12 w-full animate-pulse rounded bg-zinc-100" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Recent Messages</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="h-12 w-full animate-pulse rounded bg-zinc-100" />
+                  <div className="h-12 w-full animate-pulse rounded bg-zinc-100" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-      </div>
+      </SellerPageShell>
     </PageShell>
   );
 }

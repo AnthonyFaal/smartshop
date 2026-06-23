@@ -697,3 +697,1010 @@ Code quality must be suitable for a platform expected to grow to 5 million users
 
 
 Some og the features in the prompt has been handleded already
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# SMARTSHOP SELLER PLATFORM MASTER BUILD SPECIFICATION
+
+## Objective
+
+Build a production-grade Seller Platform for SmartShop that supports:
+
+* Individual sellers
+* Business sellers
+* Verified sellers
+* Subscription-based selling
+* Escrow commerce
+* AI-powered seller assistance
+* Fraud prevention
+* Trust-based marketplace operations
+
+The seller experience must follow:
+
+* Nielsen's 10 Heuristics
+* WCAG 2.2 AA
+* Fitts Law
+* Hick's Law
+* Progressive Disclosure
+* Recognition over Recall
+* Internal Design Consistency
+* External Design Consistency
+* Mobile-first UX
+
+---
+
+# SELLER LIFECYCLE
+
+Buyer Account
+↓
+Become Seller
+↓
+Identity Verification
+↓
+Location Verification
+↓
+Store Setup
+↓
+Payment Setup
+↓
+Subscription Selection
+↓
+Subscription Payment
+↓
+Seller Approval
+↓
+Product Creation
+↓
+AI Review
+↓
+Product Publication
+↓
+Order Fulfillment
+↓
+Escrow Settlement
+
+---
+
+# SELLER NAVIGATION
+
+Seller Dashboard
+
+Sidebar:
+
+Dashboard
+
+Orders
+
+Products
+
+Inventory
+
+Customers
+
+Messages
+
+Marketing
+
+Analytics
+
+Store
+
+Verification
+
+Subscription
+
+Payouts
+
+AI Assistant
+
+Support
+
+Settings
+
+Collapse sidebar on mobile.
+
+Persistent navigation.
+
+Maximum 2-click access to critical actions.
+
+---
+
+# DASHBOARD
+
+Purpose:
+
+Immediate seller awareness.
+
+Cards:
+
+Total Revenue
+
+Pending Escrow
+
+Available Balance
+
+Orders Today
+
+Products Live
+
+Conversion Rate
+
+Trust Score
+
+Subscription Status
+
+Verification Status
+
+Recent Reviews
+
+Recent Messages
+
+Recent Orders
+
+Quick Actions:
+
+Add Product
+
+Manage Orders
+
+Upgrade Plan
+
+Withdraw Funds
+
+AI Generate Listing
+
+View Analytics
+
+Dashboard must load under 2 seconds.
+
+Skeleton loaders required.
+
+---
+
+# SELLER VERIFICATION CENTER
+
+Status Banner
+
+Verification Progress
+
+Identity
+
+Location
+
+Store
+
+Payout
+
+Subscription
+
+Overall Verification %
+
+---
+
+## GHANA CARD VERIFICATION
+
+Requirements
+
+Front Image
+
+Back Image
+
+Image Validation
+
+AI checks:
+
+Blur detection
+
+Glare detection
+
+Crop detection
+
+Edge visibility
+
+Text readability
+
+OCR confidence
+
+Reject immediately if quality threshold fails.
+
+Display clear reason.
+
+Example:
+
+The uploaded document is too blurry.
+Please retake the image in good lighting.
+
+---
+
+## LIVE FACE VERIFICATION
+
+Camera access required.
+
+Random challenge sequence.
+
+Examples:
+
+Blink twice
+
+Turn head left
+
+Turn head right
+
+Smile
+
+Raise right hand
+
+Look upward
+
+Verification Rules
+
+Must detect:
+
+Face presence
+
+Liveness
+
+Movement
+
+Challenge completion
+
+Anti-spoofing
+
+Face match score generated.
+
+Face Match Threshold
+
+95–100:
+Auto Approve
+
+85–94:
+Manual Review
+
+Below 85:
+Reject
+
+Display confidence score to admins only.
+
+---
+
+## LOCATION VERIFICATION
+
+Request GPS permission.
+
+Capture:
+
+Latitude
+
+Longitude
+
+Accuracy
+
+Timestamp
+
+Require accuracy below configured threshold.
+
+Seller cannot edit verified coordinates manually.
+
+---
+
+# STORE SETUP
+
+Store Name
+
+Store Description
+
+Business Type
+
+Individual
+
+Registered Business
+
+Store Logo
+
+Store Banner
+
+Business Address
+
+Region
+
+District
+
+City
+
+Landmark
+
+Support Email
+
+Support Phone
+
+Business Registration Number (optional)
+
+Store Preview before submission.
+
+---
+
+# SUBSCRIPTION MANAGEMENT
+
+Pricing controlled entirely by Admin.
+
+Frontend receives plans dynamically.
+
+Never hardcode pricing.
+
+---
+
+## FREE
+
+Purpose:
+
+Seller onboarding.
+
+Features:
+
+Store setup
+
+Product drafts
+
+Basic analytics
+
+AI usage limited
+
+Cannot publish products
+
+Cannot receive orders
+
+Banner:
+
+Upgrade to activate product publishing.
+
+---
+
+## STARTER
+
+Features:
+
+Product publishing
+
+Up to configured product limit
+
+Escrow selling
+
+Order management
+
+Basic AI
+
+Basic analytics
+
+Customer messaging
+
+Review management
+
+Store profile
+
+---
+
+## BUSINESS
+
+Everything in Starter
+
+Advanced analytics
+
+Inventory forecasting
+
+Pricing suggestions
+
+Bulk uploads
+
+Promotions
+
+Campaign tools
+
+Advanced AI generation
+
+Priority support
+
+---
+
+## ENTERPRISE
+
+Everything in Business
+
+Unlimited products
+
+Multi-store
+
+Staff accounts
+
+API access
+
+Custom workflows
+
+Dedicated support
+
+Advanced reporting
+
+Marketplace integrations
+
+---
+
+# PRODUCT MANAGEMENT
+
+Product Statuses
+
+Draft
+
+Pending Review
+
+Rejected
+
+Published
+
+Paused
+
+Archived
+
+Sold Out
+
+Quick Actions
+
+Create
+
+Duplicate
+
+Archive
+
+Pause
+
+Promote
+
+Delete
+
+Bulk Actions
+
+Supported.
+
+---
+
+# PRODUCT CREATION FLOW
+
+Step 1
+
+Basic Information
+
+Title
+
+Category
+
+Brand
+
+Condition
+
+Description
+
+---
+
+Step 2
+
+Media
+
+Images
+
+Video
+
+360 View
+
+Image Quality Validation
+
+---
+
+Step 3
+
+Inventory
+
+SKU
+
+Stock
+
+Variants
+
+Weight
+
+Dimensions
+
+---
+
+Step 4
+
+Pricing
+
+Price
+
+Discount
+
+Wholesale Pricing
+
+AI Pricing Suggestion
+
+---
+
+Step 5
+
+Delivery
+
+Shipping Methods
+
+Pickup
+
+Regions Supported
+
+Processing Time
+
+---
+
+Step 6
+
+AI Review
+
+Scam Detection
+
+Duplicate Detection
+
+Policy Detection
+
+Counterfeit Detection
+
+Risk Scoring
+
+---
+
+Step 7
+
+Preview
+
+Publish
+
+---
+
+# AI ASSISTANT
+
+Dedicated seller AI workspace.
+
+Functions:
+
+Generate Title
+
+Generate Description
+
+SEO Optimization
+
+Keyword Suggestions
+
+Pricing Recommendations
+
+Competitor Insights
+
+Demand Forecasting
+
+Inventory Forecasting
+
+Customer Reply Assistant
+
+Review Response Assistant
+
+Policy Guidance
+
+Subscription-based usage limits enforced server-side.
+
+---
+
+# ORDER MANAGEMENT
+
+Statuses
+
+Pending Payment
+
+Escrow Funded
+
+Processing
+
+Ready for Pickup
+
+Shipped
+
+Delivered
+
+Completed
+
+Disputed
+
+Cancelled
+
+Refunded
+
+Order Timeline visible.
+
+Full audit trail.
+
+---
+
+# ESCROW CENTER
+
+Escrow Status
+
+Held
+
+Pending Release
+
+Released
+
+Refunded
+
+Disputed
+
+Escrow Timeline
+
+Payment Received
+
+Shipment Confirmed
+
+Delivery Confirmed
+
+Release Completed
+
+Dispute Opened
+
+Seller sees estimated release date.
+
+---
+
+# PAYOUT CENTER
+
+Available Balance
+
+Pending Escrow
+
+Lifetime Earnings
+
+Withdrawal Requests
+
+Bank Accounts
+
+Mobile Money Accounts
+
+Transaction History
+
+Export CSV
+
+Admin approval support.
+
+---
+
+# CUSTOMER MESSAGES
+
+Real-time messaging.
+
+Features:
+
+Attachments
+
+Images
+
+Order references
+
+Read receipts
+
+Typing indicators
+
+Block user
+
+Report user
+
+AI suggested replies.
+
+---
+
+# ANALYTICS
+
+Revenue
+
+Orders
+
+Conversion
+
+Traffic
+
+Product Performance
+
+Customer Retention
+
+Refund Rate
+
+Dispute Rate
+
+Trust Score Trend
+
+Subscription Utilization
+
+Date Filters
+
+Export Support
+
+---
+
+# TRUST SCORE CENTER
+
+Score
+
+0–100
+
+Factors
+
+Identity Verification
+
+Location Verification
+
+Ratings
+
+Completion Rate
+
+Refund Rate
+
+Disputes
+
+Account Age
+
+Policy Violations
+
+Trust History Timeline
+
+Recommendations for improvement.
+
+---
+
+# NOTIFICATIONS
+
+Channels
+
+In-App
+
+Email
+
+SMS
+
+Push (future)
+
+Categories
+
+Orders
+
+Escrow
+
+Verification
+
+Subscription
+
+Messages
+
+System
+
+Promotions
+
+Preferences configurable.
+
+---
+
+# SUBSCRIPTION EXPIRY UX
+
+30 Days
+
+14 Days
+
+7 Days
+
+3 Days
+
+1 Day
+
+Expiry
+
+Notifications triggered automatically.
+
+If subscription expires:
+
+Products remain visible.
+
+New orders paused.
+
+Seller dashboard shows warning state.
+
+Grace period configurable by admin.
+
+---
+
+# HCI REQUIREMENTS
+
+Recognition over Recall
+
+Show statuses visually.
+
+Never require users to remember codes.
+
+---
+
+Error Prevention
+
+Validate before submission.
+
+Prevent accidental product deletion.
+
+Confirmation for destructive actions only.
+
+---
+
+Visibility of System Status
+
+Real-time upload progress.
+
+Verification progress.
+
+Escrow progress.
+
+Order progress.
+
+AI generation progress.
+
+---
+
+Consistency
+
+Buttons
+
+Forms
+
+Colors
+
+Typography
+
+Spacing
+
+Icons
+
+Terminology
+
+Must remain identical across all seller pages.
+
+---
+
+Accessibility
+
+Keyboard navigation
+
+Screen reader labels
+
+Focus states
+
+ARIA support
+
+Color contrast compliance
+
+---
+
+Performance
+
+Server components where possible.
+
+Optimistic updates.
+
+Infinite scroll.
+
+Image optimization.
+
+Suspense boundaries.
+
+Code splitting.
+
+Virtualized tables.
+
+---
+
+ADMIN OVERRIDES
+
+Admins can:
+
+Approve sellers
+
+Reject sellers
+
+Suspend sellers
+
+Adjust trust score
+
+Review verification submissions
+
+Manage subscriptions
+
+Override limits
+
+Review AI risk scores
+
+Review escrow disputes
+
+Audit seller activity
+
+Every action logged.
+
+Immutable audit trail required.
+
+---
+
+SUCCESS CRITERIA
+
+Seller can:
+
+Register
+
+Verify identity
+
+Subscribe
+
+Publish products
+
+Receive escrow payments
+
+Manage orders
+
+Use AI tools
+
+Grow trust score
+
+Operate entirely within SmartShop without external tools.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

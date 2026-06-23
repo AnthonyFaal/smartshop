@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ShoppingCart, Heart, MessageCircle, User, Store } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { useInitialAuthUser } from "@/components/providers/auth-provider";
@@ -15,6 +16,7 @@ export function Header() {
   });
 
   const isLoading = initialUser === undefined && user === undefined;
+  const router = useRouter();
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
@@ -73,12 +75,8 @@ export function Header() {
             </>
           ) : (
             <>
-              <Button variant="ghost" asChild>
-                <Link href="/login">Sign in</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/register">Get started</Link>
-              </Button>
+              <Button variant="ghost" onClick={() => router.push("/login")}>Sign in</Button>
+              <Button onClick={() => router.push("/register")}>Get started</Button>
             </>
           )}
         </div>

@@ -7,6 +7,7 @@ import {
 } from "@/server/trpc/init";
 import * as authService from "@/server/services/auth.service";
 import { prisma } from "@/lib/db/prisma";
+import { OtpPurpose } from "@prisma/client";
 
 export const authRouter = createTRPCRouter({
   register: publicProcedure
@@ -91,8 +92,10 @@ export const authRouter = createTRPCRouter({
     .use(withErrorHandling)
     .input(
       z.object({
-        phone: z.string().regex(/^\+233[0-9]{9}$/, "Use Ghana format: +233XXXXXXXXX"),
-        purpose: z.enum(["PHONE_VERIFICATION", "PASSWORD_RESET", "LOGIN"]),
+        phone: z
+          .string()
+          .regex(/^\+233[0-9]{9}$/, "Use Ghana format: +233XXXXXXXXX"),
+        purpose: z.nativeEnum(OtpPurpose),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -103,6 +106,7 @@ export const authRouter = createTRPCRouter({
       });
       return { success: true };
     }),
+    
 
   verifyOtp: protectedProcedure
     .use(withErrorHandling)
@@ -110,14 +114,64 @@ export const authRouter = createTRPCRouter({
       z.object({
         phone: z.string(),
         code: z.string().length(6),
-        purpose: z.enum(["PHONE_VERIFICATION", "PASSWORD_RESET", "LOGIN"]),
+        purpose: z.nativeEnum(OtpPurpose), // Fixed: Fully synced with all 4 schema enums
       })
     )
     .mutation(async ({ input, ctx }) => {
       await authService.verifyOtp({
-        ...input,
+        phone: input.phone,
+        code: input.code,
+        purpose: input.purpose,
         userId: ctx.user.id,
       });
+      return { success: true };
+    }),
+
+  sendEmailVerification: protectedProcedure
+    .use(withErrorHandling)
+    .mutation(async ({ ctx }) => {
+      await authService.sendEmailVerification({
+        userId: ctx.user.id,
+        email: ctx.user.email,
+      });
+      return { success: true };
+    }),
+
+  // Allow verifying email codes from the public flow (user may be unauthenticated)
+  verifyEmailOtp: publicProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        email: z.string().email(),
+        code: z.string().length(6),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const user = await prisma.user.findFirst({ where: { email: input.email.toLowerCase(), deletedAt: null } });
+      if (!user) throw new Error("Invalid verification request");
+
+      await authService.verifyOtp({
+        phone: input.email,
+        code: input.code,
+        purpose: OtpPurpose.EMAIL_VERIFICATION,
+        userId: user.id,
+      });
+      return { success: true };
+    }),
+
+  // Public resend for email verification (does not reveal account existence)
+  resendEmailVerification: publicProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        email: z.string().email(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const user = await prisma.user.findFirst({ where: { email: input.email.toLowerCase(), deletedAt: null } });
+      if (!user) return { success: true };
+
+      await authService.sendEmailVerification({ userId: user.id, email: user.email });
       return { success: true };
     }),
 

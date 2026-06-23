@@ -33,6 +33,7 @@ function LoginForm() {
     register,
     handleSubmit,
     formState: { errors },
+    getValues,
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
@@ -44,6 +45,14 @@ function LoginForm() {
       router.push(redirect);
     },
     onError: (error) => {
+      // Backend throws a string for this special case
+      if (error.message === "EMAIL_VERIFICATION_REQUIRED") {
+        toast.error("Please verify your email to continue.");
+        const email = getValues("email") ?? "";
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
       toast.error(error.message || "Invalid credentials");
       setIsLoading(false);
     },

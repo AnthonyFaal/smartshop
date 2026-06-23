@@ -17,29 +17,43 @@ export interface CreateNotificationInput {
 }
 
 async function sendEmail(to: string, subject: string, body: string) {
-  // In dev/test without SMTP configured, we only log.
-  if (!env.SMTP_HOST || !env.SMTP_USER) {
-    console.info(`[Email] Would send to ${to}: ${subject}`);
-    return;
-  }
-
-  const transport = nodemailer.createTransport({
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT,
-    secure: true,
-    auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASSWORD,
-    },
-  });
-
+  let transport;
   try {
-    await transport.sendMail({
+    if (!env.SMTP_HOST || !env.SMTP_USER) {
+      // Dev fallback: create an Ethereal test account to preview emails.
+      const testAccount = await nodemailer.createTestAccount();
+      transport = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false,
+        auth: { user: testAccount.user, pass: testAccount.pass },
+      });
+    } else {
+      transport = nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        secure: env.SMTP_PORT === 465,
+        auth: {
+          user: env.SMTP_USER,
+          pass: env.SMTP_PASSWORD,
+        },
+      });
+    }
+
+    const textBody = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    const info = await transport.sendMail({
       from: env.SMTP_FROM,
       to,
       subject,
-      text: body,
+      text: textBody,
+      html: body,
     });
+
+    if (!env.SMTP_HOST || !env.SMTP_USER) {
+      const url = nodemailer.getTestMessageUrl(info);
+      console.info(`[Email][Ethereal] Message preview URL: ${url}`);
+    }
   } catch (err) {
     // Do not fail the auth flow due to mail server issues.
     // Also avoids leaking account existence; the TRPC endpoint should still succeed.

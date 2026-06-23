@@ -77,38 +77,57 @@ export default function AdminDashboardPage() {
           </CardHeader>
         </Card>
 
-        <Card className="mt-8">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Seller Approval Queue</CardTitle>
-            <Badge variant="secondary">
-              {sellerQueue?.items.length ?? 0} pending
-            </Badge>
-          </CardHeader>
-          <CardContent>
-            {!sellerQueue?.items.length ? (
-              <p className="text-sm text-zinc-500">No pending verifications</p>
-            ) : (
-              <div className="space-y-4">
-                {sellerQueue.items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between rounded-lg border border-zinc-200 p-4"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {item.user.profile?.displayName ?? item.user.email}
-                      </p>
-                      <p className="text-sm text-zinc-500">{item.shopCity}, {item.shopRegion}</p>
+        <div className="mt-8 grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Seller Approval Queue</CardTitle>
+              <Badge variant="secondary">
+                {sellerQueue?.items.length ?? 0} pending
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              {!sellerQueue?.items.length ? (
+                <p className="text-sm text-zinc-500">No pending verifications</p>
+              ) : (
+                <div className="space-y-4">
+                  {sellerQueue.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between rounded-lg border border-zinc-200 p-4"
+                    >
+                      <div>
+                        <p className="font-medium">
+                          {item.user.profile?.displayName ?? item.user.email}
+                        </p>
+                        <p className="text-sm text-zinc-500">
+                          {item.shopCity}, {item.shopRegion}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <ApproveButton verificationId={item.id} />
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <ApproveButton verificationId={item.id} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Verification Center</CardTitle>
+              <Badge variant="secondary">Manage decisions</Badge>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-4">
+              <p className="text-sm text-zinc-500">
+                Approve or reject seller verification requests with audit trail.
+              </p>
+              <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                <Link href="/admin/verification">Open</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );
