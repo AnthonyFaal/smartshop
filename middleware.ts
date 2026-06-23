@@ -23,9 +23,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuth && hasSession) {
-    return NextResponse.redirect(new URL("/marketplace", request.url));
-  }
+  // Do not redirect authenticated users away from auth pages purely based on cookie presence.
+  // Email verification enforcement must be done by server-side session resolution (emailVerified) and/or
+  // the auth pages themselves, otherwise unverified users get bounced to protected areas.
 
   const response = NextResponse.next();
 

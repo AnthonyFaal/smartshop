@@ -90,6 +90,15 @@ export async function registerUser(input: {
     return created;
   });
 
+  // Email verification enforcement for registration:
+  // - Always send the verification code
+  // - Only create an auth session + cookies if email is already verified
+  //   (typically not the case for new users).
+  if (!user.emailVerified) {
+    await sendEmailVerification({ userId: user.id, email: user.email });
+    return { user, sessionId: null };
+  }
+
   const session = await createSession(user, {
     userAgent: input.userAgent,
     ipAddress: input.ipAddress,

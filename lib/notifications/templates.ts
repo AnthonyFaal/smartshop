@@ -22,7 +22,7 @@ export function compileHtmlEmail(options: EmailTemplateOptions): string {
   const codeSection = options.code
     ? `
       <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:16px; padding:28px 20px; margin:30px 0; text-align:center;">
-        <div style="font-size:42px; font-weight:800; letter-spacing:10px; color:#0f172a; font-family:Arial,Helvetica,sans-serif;">
+        <div style="font-size:42px; font-weight:800; letter-spacing:10px; color:#14532d; font-family:Arial,Helvetica,sans-serif;">
           ${options.code}
         </div>
         ${options.codeSubtitle ? `<p style="margin:12px 0 0; color:#64748b; font-size:14px;">${options.codeSubtitle}</p>` : ""}
@@ -32,8 +32,8 @@ export function compileHtmlEmail(options: EmailTemplateOptions): string {
 
   const alertSection = options.alertText
     ? `
-      <div style="background:#fff7ed; border:1px solid #fed7aa; border-radius:14px; padding:18px; margin-top:25px; color:#9a3412; font-size:14px; line-height:22px;">
-        ${options.alertTitle ? `<div style="font-weight:700; margin-bottom:8px; color:#7c2d12;">${options.alertTitle}</div>` : ""}
+      <div style="background:#ecfdf5; border:1px solid #6ee7b7; border-radius:14px; padding:18px; margin-top:25px; color:#dcfce7; font-size:14px; line-height:22px;">
+        ${options.alertTitle ? `<div style="font-weight:700; margin-bottom:8px; color:#166534;">${options.alertTitle}</div>` : ""}
         ${options.alertText}
       </div>
     `
@@ -57,7 +57,7 @@ export function compileHtmlEmail(options: EmailTemplateOptions): string {
       <td align="center" style="padding:40px 15px;">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px; background:#ffffff; border-radius:20px; overflow:hidden; box-shadow:0 20px 45px rgba(15,23,42,.08);">
           <tr>
-            <td style="background:#0f172a; padding:35px; text-align:center;">
+            <td style="background:#14532d; padding:35px; text-align:center;">
               <h1 style="margin:0; font-size:28px; color:white; font-weight:800;">
                 ${APP_NAME}<span style="color:#38bdf8">.</span>
               </h1>
@@ -65,7 +65,7 @@ export function compileHtmlEmail(options: EmailTemplateOptions): string {
           </tr>
           <tr>
             <td style="padding:40px;">
-              <h2 style="margin:0 0 20px; font-size:24px; color:#0f172a;">${options.subtitle}</h2>
+              <h2 style="margin:0 0 20px; font-size:24px; color:#14532d;">${options.subtitle}</h2>
               ${paragraphsHtml}
               ${codeSection}
               ${alertSection}

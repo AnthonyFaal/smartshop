@@ -37,6 +37,8 @@ export const authRouter = createTRPCRouter({
         role: result.user.role,
         phone: result.user.phone,
         phoneVerified: result.user.phoneVerified,
+        emailVerified: result.user.emailVerified,
+        sessionId: result.sessionId,
       };
     }),
 
