@@ -4,19 +4,34 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ShoppingCart, Heart, MessageCircle, User, Store } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
-import { useInitialAuthUser } from "@/components/providers/auth-provider";
+import { useAuthUser } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect } from "react";
+
 
 export function Header() {
-  const initialUser = useInitialAuthUser();
-  const { data: user } = trpc.auth.me.useQuery(undefined, {
-    initialData: initialUser ?? undefined,
-    staleTime: 60_000,
+  const { user: contextUser, updateAuthUser } = useAuthUser();
+  const { data: user, isLoading } = trpc.auth.me.useQuery(undefined, {
+    enabled: true,
   });
 
-  const isLoading = initialUser === undefined && user === undefined;
+  // Keep header UI in sync on login/logout.
+  // IMPORTANT: never call setState during render; do it in an effect.
+  // We’ll derive the UI from query result first, and also push it into context.
+  const resolvedUser = user ?? contextUser ?? null;
+  const resolvedIsLoading = isLoading && resolvedUser === null;
+
+  // Keep the context in sync after query changes.
+  useEffect(() => {
+    if (!isLoading && user !== contextUser) {
+      updateAuthUser(user ?? null);
+    }
+  }, [isLoading, user, contextUser, updateAuthUser]);
+
+
   const router = useRouter();
+
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
@@ -45,12 +60,12 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {isLoading ? (
+          {resolvedIsLoading ? (
             <>
               <Skeleton className="h-9 w-16" />
               <Skeleton className="h-9 w-24" />
             </>
-          ) : user ? (
+          ) : resolvedUser ? (
             <>
               <Button variant="ghost" size="icon" asChild>
                 <Link href="/wishlist" aria-label="Wishlist">

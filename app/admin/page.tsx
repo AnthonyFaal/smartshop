@@ -100,7 +100,7 @@ export default function AdminDashboardPage() {
                           {item.user.profile?.displayName ?? item.user.email}
                         </p>
                         <p className="text-sm text-zinc-500">
-                          {item.shopCity}, {item.shopRegion}
+                          {item.shop_city}, {item.shop_region}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -122,9 +122,17 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-zinc-500">
                 Approve or reject seller verification requests with audit trail.
               </p>
-              <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                <Link href="/admin/verification">Open</Link>
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700">
+                  <Link href="/admin/verification">Verification Center</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/admin/verification/ghana-card">Ghana Card</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/admin/verification/gps">GPS & Location</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

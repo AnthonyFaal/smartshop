@@ -58,6 +58,77 @@ export async function generateUploadUrl(
   return { uploadUrl, storageKey, publicUrl };
 }
 
+export interface UploadPublicImageInput {
+  bucket: string;
+  pathPrefix: string; // e.g. "ghana-card" or "seller-verification/selfie"
+  file: File | Buffer;
+  filename?: string; // optional for File/Buffer; for File we infer extension
+  mimeType?: string; // optional override
+}
+
+function getFileInfo(input: UploadPublicImageInput): {
+  ext: string;
+  mimeType: string;
+} {
+  if (input.mimeType) {
+    return {
+      ext: (input.filename?.split(".").pop() ?? "jpg").toLowerCase(),
+      mimeType: input.mimeType,
+    };
+  }
+
+  if (typeof File !== "undefined" && input.file instanceof File) {
+    const mimeType = input.file.type || "image/jpeg";
+    const ext =
+      (input.filename?.split(".").pop() ?? input.file.name.split(".").pop() ?? "jpg").toLowerCase();
+    return { ext, mimeType };
+  }
+
+  return { ext: "jpg", mimeType: "image/jpeg" };
+}
+
+function toUint8Array(data: Buffer | ArrayBuffer): Uint8Array {
+  if (data instanceof Uint8Array) return data;
+  return new Uint8Array(data);
+}
+
+export async function uploadPublicImage(
+  input: UploadPublicImageInput
+): Promise<{ publicUrl: string; storageKey: string; }> {
+  const client = getS3Client();
+
+  const { ext, mimeType } = getFileInfo(input);
+  const safePrefix = input.pathPrefix.replace(/^\/+|\/+$/g, "");
+  const id = nanoid();
+  const finalFilename = input.filename
+    ? input.filename
+    : `${id}.${ext}`;
+  const storageKey = `${safePrefix}/${finalFilename}`;
+
+  let body: Buffer;
+  if (typeof File !== "undefined" && input.file instanceof File) {
+    const arrayBuffer = await input.file.arrayBuffer();
+    body = Buffer.from(arrayBuffer);
+  } else {
+    body = Buffer.isBuffer(input.file)
+      ? input.file
+      : Buffer.from(input.file as any);
+  }
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: input.bucket,
+      Key: storageKey,
+      ContentType: mimeType,
+      Body: body,
+    })
+  );
+
+  const publicUrl = `${env.S3_PUBLIC_URL}/${input.bucket}/${storageKey}`;
+  return { publicUrl, storageKey };
+}
+
+
 export async function deleteFile(
   bucket: string,
   storageKey: string

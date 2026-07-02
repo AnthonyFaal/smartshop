@@ -16,7 +16,7 @@ function getBaseUrl() {
 
 export function TRPCProvider({
   children,
-  initialAuthUser = null,
+  initialAuthUser,
 }: {
   children: React.ReactNode;
   initialAuthUser?: AuthUser | null;
