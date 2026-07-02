@@ -5,6 +5,7 @@ import {
   type NotificationType,
 } from "@prisma/client";
 import { env } from "@/lib/config/env";
+import nodemailer from "nodemailer";
 
 export interface CreateNotificationInput {
   userId: string;
@@ -15,17 +16,49 @@ export interface CreateNotificationInput {
   channels?: NotificationChannel[];
 }
 
-async function sendEmail(
-  to: string,
-  subject: string,
-  body: string
-): Promise<void> {
-  if (!env.SMTP_HOST) {
-    console.info(`[Email] Would send to ${to}: ${subject}`);
-    return;
+async function sendEmail(to: string, subject: string, body: string) {
+  let transport;
+  try {
+    if (!env.SMTP_HOST || !env.SMTP_USER) {
+      // Dev fallback: create an Ethereal test account to preview emails.
+      const testAccount = await nodemailer.createTestAccount();
+      transport = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false,
+        auth: { user: testAccount.user, pass: testAccount.pass },
+      });
+    } else {
+      transport = nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        secure: env.SMTP_PORT === 465,
+        auth: {
+          user: env.SMTP_USER,
+          pass: env.SMTP_PASSWORD,
+        },
+      });
+    }
+
+    const textBody = body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+    const info = await transport.sendMail({
+      from: env.SMTP_FROM,
+      to,
+      subject,
+      text: textBody,
+      html: body,
+    });
+
+    if (!env.SMTP_HOST || !env.SMTP_USER) {
+      const url = nodemailer.getTestMessageUrl(info);
+      console.info(`[Email][Ethereal] Message preview URL: ${url}`);
+    }
+  } catch (err) {
+    // Do not fail the auth flow due to mail server issues.
+    // Also avoids leaking account existence; the TRPC endpoint should still succeed.
+    console.error("[Email] sendMail failed:", err);
   }
-  // Production SMTP integration via nodemailer can be added when credentials are configured
-  console.info(`[Email] Sent to ${to}: ${subject}`);
 }
 
 async function sendSms(to: string, message: string): Promise<void> {
@@ -33,6 +66,8 @@ async function sendSms(to: string, message: string): Promise<void> {
     console.info(`[SMS] Would send to ${to}: ${message}`);
     return;
   }
+
+  // TODO: integrate SMS provider. Keeping current stub.
   console.info(`[SMS] Sent to ${to}`);
 }
 
@@ -62,6 +97,7 @@ export async function createNotification(
   if (!user) return;
 
   if (channels.includes("EMAIL")) {
+    // Email sending failures should not fail the reset-request flow.
     await sendEmail(user.email, input.title, input.body);
   }
 
@@ -86,3 +122,4 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
     data: { isRead: true, readAt: new Date() },
   });
 }
+

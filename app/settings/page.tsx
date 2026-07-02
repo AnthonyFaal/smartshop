@@ -7,28 +7,30 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PhoneVerification } from "@/components/auth/phone-verification";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import { trpc } from "@/lib/trpc/client";
-import { useInitialAuthUser } from "@/components/providers/auth-provider";
+import { useAuthUser } from "@/components/providers/auth-provider";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const initialUser = useInitialAuthUser();
-  const { data: user } = trpc.auth.me.useQuery(undefined, {
-    initialData: initialUser ?? undefined,
-    staleTime: 60_000,
-  });
+  const { data: user } = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
+
+  const { updateAuthUser } = useAuthUser();
 
   const logout = trpc.auth.logout.useMutation({
     onSuccess: async () => {
+      // Immediately update client-side header state.
+      updateAuthUser(null);
       await utils.auth.me.invalidate();
       toast.success("Signed out");
       router.push("/");
     },
     onError: (error) => toast.error(error.message),
   });
+
 
   if (!user) {
     return (

@@ -120,6 +120,7 @@ export const cacheKeys = {
   userCart: (userId: string) => `cart:${userId}`,
   aiUsage: (userId: string, date: string) => `ai:usage:${userId}:${date}`,
   passwordReset: (userId: string) => `pwd-reset:${userId}`,
+  otpCooldown: (identifier: string, purpose: string) => `otp-cooldown:${purpose}:${identifier}`,
 } as const;
 
 export async function cacheGet<T>(key: string): Promise<T | null> {

@@ -135,8 +135,14 @@ export async function createOrderFromCart(
           method: input.paymentMethod,
           status: paymentResult.status,
           providerRef: paymentResult.providerRef,
-          providerData: paymentResult.providerData as Prisma.InputJsonValue | undefined,
-          ...(paymentResult.status === "COMPLETED" && { paidAt: new Date() }),
+          providerData:
+            paymentResult.providerData as Prisma.InputJsonValue | undefined,
+
+          ...(paymentResult.status === "COMPLETED" && {
+            paidAt: new Date(),
+            // Escrow: mark funds as held once payment is captured.
+            escrowHeldAt: new Date(),
+          }),
         },
       });
 
@@ -207,15 +213,31 @@ export async function updateOrderStatus(
     );
   }
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status,
-      ...(status === "COMPLETED" && { completedAt: new Date() }),
-      ...(status === "CANCELLED" && {
-        cancelledAt: new Date(),
-      }),
-    },
+  // If we're completing the order, release escrow for all payments of this order.
+  const updated = await prisma.$transaction(async (tx) => {
+    const o = await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status,
+        ...(status === "COMPLETED" && { completedAt: new Date() }),
+        ...(status === "CANCELLED" && {
+          cancelledAt: new Date(),
+        }),
+      },
+    });
+
+    if (status === "COMPLETED") {
+      await tx.payment.updateMany({
+        where: {
+          orderId,
+        },
+        data: {
+          refundedAt: new Date(),
+        },
+      });
+    }
+
+    return o;
   });
 
   await createNotification({

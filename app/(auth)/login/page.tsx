@@ -33,6 +33,7 @@ function LoginForm() {
     register,
     handleSubmit,
     formState: { errors },
+    getValues,
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
@@ -41,10 +42,23 @@ function LoginForm() {
     onSuccess: async () => {
       await utils.auth.me.invalidate();
       toast.success("Welcome back!");
+      // Cookies are set on the server during the mutation.
+      // Force a new server render so protected server components re-evaluate auth immediately.
+      router.refresh();
       router.push(redirect);
     },
-    onError: (error) => {
-      toast.error(error.message || "Invalid credentials");
+    onError: (err) => {
+      // Backend throws a string for this special case
+      const message = (err as { message?: string })?.message ?? "Invalid credentials";
+
+      if (message === "EMAIL_VERIFICATION_REQUIRED") {
+        toast.error("Please verify your email to continue.");
+        const email = getValues("email") ?? "";
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
+      toast.error(message);
       setIsLoading(false);
     },
   });

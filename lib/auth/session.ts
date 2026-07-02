@@ -23,6 +23,7 @@ export interface SessionUser {
   role: UserRole;
   phone: string | null;
   phoneVerified: boolean;
+  emailVerified: boolean;
   verificationLevel: User["verificationLevel"];
 }
 
@@ -135,6 +136,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
           isActive: true,
           isSuspended: false,
           deletedAt: null,
+          emailVerified: true,
         },
         select: {
           id: true,
@@ -142,6 +144,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
           role: true,
           phone: true,
           phoneVerified: true,
+          emailVerified: true,
           verificationLevel: true,
         },
       });
@@ -176,6 +179,7 @@ export async function refreshSession(): Promise<SessionUser | null> {
             role: true,
             phone: true,
             phoneVerified: true,
+            emailVerified: true,
             verificationLevel: true,
             isActive: true,
             isSuspended: true,
@@ -189,7 +193,8 @@ export async function refreshSession(): Promise<SessionUser | null> {
       !session ||
       !session.user.isActive ||
       session.user.isSuspended ||
-      session.user.deletedAt
+      session.user.deletedAt ||
+      !session.user.emailVerified
     ) {
       return null;
     }

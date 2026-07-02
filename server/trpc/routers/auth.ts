@@ -7,6 +7,14 @@ import {
 } from "@/server/trpc/init";
 import * as authService from "@/server/services/auth.service";
 import { prisma } from "@/lib/db/prisma";
+import { createNotification } from "@/lib/notifications/service";
+import { getPaymentProvider } from "@/lib/payments/provider";
+import {
+  getPlanLimits,
+  getPlanMeta,
+  getPlanOrder,
+} from "@/lib/config/subscriptions";
+import { OtpPurpose, PaymentMethod, Prisma, SubscriptionPlan } from "@prisma/client";
 
 export const authRouter = createTRPCRouter({
   register: publicProcedure
@@ -36,6 +44,8 @@ export const authRouter = createTRPCRouter({
         role: result.user.role,
         phone: result.user.phone,
         phoneVerified: result.user.phoneVerified,
+        emailVerified: result.user.emailVerified,
+        sessionId: result.sessionId,
       };
     }),
 
@@ -68,31 +78,453 @@ export const authRouter = createTRPCRouter({
     }),
 
   me: publicProcedure.query(async ({ ctx }) => {
-    if (!ctx.user) return null;
-    const user = await prisma.user.findUnique({
-      where: { id: ctx.user.id },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        phone: true,
-        phoneVerified: true,
-        emailVerified: true,
-        verificationLevel: true,
-        profile: true,
-        subscription: { select: { plan: true, status: true } },
-        trustScore: { select: { score: true } },
+  if (!ctx.user) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: ctx.user.id },
+
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      phone: true,
+
+      phoneVerified: true,
+      emailVerified: true,
+
+      verificationLevel: true,
+
+      profile: true,
+
+      subscription: {
+        select: {
+          plan: true,
+          status: true,
+        },
       },
+
+      trustScore: {
+        select: {
+          score: true,
+        },
+      },
+
+
+      sellerVerification: {
+        select: {
+          id: true,
+          status: true,
+
+          ghanaCardNumber: true,
+          ghanaCardFrontUrl: true,
+          ghanaCardBackUrl: true,
+
+          selfieUrl: true,
+
+          shop_address: true,
+          shop_city: true,
+          shop_region: true,
+          isLocationVerified: true,
+
+          latitude: true,
+          longitude: true,
+
+          reviewedBy: true,
+          reviewedAt: true,
+
+          rejectionReason: true,
+          notes: true,
+
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+
+
+  return user;
+}),
+
+  subscriptionPlans: protectedProcedure
+    .use(withErrorHandling)
+    .query(async () => {
+      const offerings = await prisma.subscriptionOffering.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const fallbackPlans = Object.values(SubscriptionPlan).map((plan) => ({
+        tier: plan,
+        name: getPlanMeta(plan).label,
+        priceGhs: getPlanLimits(plan).priceGhs,
+        maxProducts: getPlanLimits(plan).maxProducts,
+        aiTier: getPlanLimits(plan).aiTier,
+        analytics: getPlanLimits(plan).analytics,
+        promotions: getPlanLimits(plan).promotions,
+        multiStore: getPlanLimits(plan).multiStore,
+        teamManagement: getPlanLimits(plan).teamManagement,
+        apiAccess: getPlanLimits(plan).apiAccess,
+        freeTrialDays: 0,
+        aiDailyRequests: 0,
+        aiMaxTokensPerRequest: 0,
+        isActive: true,
+      }));
+
+      const normalized = (offerings.length ? offerings : fallbackPlans)
+        .map((offering) => {
+          const plan = offering.tier as SubscriptionPlan;
+          const limits = getPlanLimits(plan);
+          const meta = getPlanMeta(plan);
+          return {
+            tier: plan,
+            name: offering.name ?? meta.label,
+            description: meta.description,
+            badge: meta.badge,
+            accent: meta.accent,
+            isPaid: meta.isPaid,
+            priceGhs: Number(offering.priceGhs ?? limits.priceGhs ?? 0),
+            maxProducts: offering.maxProducts ?? limits.maxProducts,
+            aiTier: offering.aiTier ?? limits.aiTier,
+            analytics: offering.analytics ?? limits.analytics,
+            promotions: offering.promotions ?? limits.promotions,
+            multiStore: offering.multiStore ?? limits.multiStore,
+            teamManagement: offering.teamManagement ?? limits.teamManagement,
+            apiAccess: offering.apiAccess ?? limits.apiAccess,
+            freeTrialDays: offering.freeTrialDays ?? 0,
+            aiDailyRequests: offering.aiDailyRequests ?? 0,
+            aiMaxTokensPerRequest: offering.aiMaxTokensPerRequest ?? 0,
+            isActive: offering.isActive,
+          };
+        })
+        .sort((a, b) => getPlanOrder(a.tier) - getPlanOrder(b.tier));
+
+      return { plans: normalized };
+    }),
+
+  initializeSubscriptionCheckout: protectedProcedure
+    .use(withErrorHandling)
+    .input(z.object({ plan: z.nativeEnum(SubscriptionPlan) }))
+    .mutation(async ({ input, ctx }) => {
+      if (input.plan === SubscriptionPlan.FREE) {
+        return {
+          success: true,
+          redirectUrl: null,
+          message: "Free plan is already available by default.",
+        };
+      }
+
+      const offering = await prisma.subscriptionOffering.findFirst({
+        where: { tier: input.plan, isActive: true },
+      });
+
+      const currentSubscription = await prisma.subscription.findUnique({
+        where: { userId: ctx.user.id },
+      });
+
+      if (
+        currentSubscription?.plan === input.plan &&
+        currentSubscription.status === "ACTIVE"
+      ) {
+        return {
+          success: true,
+          redirectUrl: null,
+          message: "You already have this plan.",
+        };
+      }
+
+      const amountGhs = Number(offering?.priceGhs ?? getPlanLimits(input.plan).priceGhs ?? 0);
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      const provider = getPaymentProvider(process.env.PAYMENT_PROVIDER);
+      const result = await provider.initiate({
+        orderId: `sub_${ctx.user.id}_${Date.now()}`,
+        amount: Math.round(amountGhs * 100),
+        currency: "GHS",
+        method: PaymentMethod.CARD,
+        customerEmail: ctx.user.email,
+        customerPhone: ctx.user.phone ?? undefined,
+        metadata: {
+          plan: input.plan,
+          userId: ctx.user.id,
+          purpose: "subscription",
+        },
+      });
+
+      const nextStatus = result.status === "COMPLETED" ? "ACTIVE" : "TRIALING";
+
+      await prisma.subscription.upsert({
+        where: { userId: ctx.user.id },
+        create: {
+          userId: ctx.user.id,
+          plan: input.plan,
+          status: nextStatus,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+          providerRef: result.providerRef,
+        },
+        update: {
+          plan: input.plan,
+          status: nextStatus,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+          providerRef: result.providerRef,
+        },
+      });
+
+      await createNotification({
+        userId: ctx.user.id,
+        type: "SYSTEM",
+        title: "Subscription checkout started",
+        body: "Your subscription upgrade request is being processed.",
+        channels: ["IN_APP"],
+      });
+
+      return {
+        success: true,
+        redirectUrl: result.redirectUrl ?? null,
+        providerRef: result.providerRef,
+        message: nextStatus === "ACTIVE" ? "Your plan is now active." : "Complete payment to activate your plan.",
+      };
+    }),
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Seller verification (new automated flow)
+  // NOTE: Production OCR/liveness/face matching/location-zone logic will be
+  // implemented in dedicated services. For now these endpoints are updated
+  // to align with the new Prisma schema and remove manual URL/GPS inputs.
+
+sellerVerificationUpsertGhanaCardImage: protectedProcedure
+.use(withErrorHandling)
+.input(
+  z.object({
+    ghanaCardFrontUrl: z.string().url().max(2048),
+
+    ghanaCardBackUrl: z.string().url().max(2048).optional(),
+
+    ghanaCardNumber: z.string().min(1).max(255),
+  })
+)
+
+
+.mutation(async ({ input, ctx }) => {
+
+  const userId = ctx.user.id;
+
+
+  const existing =
+    await prisma.sellerVerification.findUnique({
+      where:{
+        userId
+      }
     });
-    return user;
-  }),
+
+
+  if(existing?.ghanaCardNumber === input.ghanaCardNumber){
+    return {
+      success:true
+    };
+  }
+
+
+  await prisma.sellerVerification.upsert({
+
+    where:{
+      userId
+    },
+
+
+    create:{
+
+      userId,
+
+      ghanaCardNumber:
+        input.ghanaCardNumber,
+
+      ghanaCardFrontUrl:
+        input.ghanaCardFrontUrl,
+
+      ghanaCardBackUrl:
+        input.ghanaCardBackUrl ?? null,
+
+
+      selfieUrl:"",
+
+
+      shop_address:"",
+      shop_city:"",
+      shop_region:"",
+
+
+      latitude:0,
+      longitude:0,
+
+
+      status:"PENDING",
+    },
+
+
+    update:{
+
+      ghanaCardNumber:
+        input.ghanaCardNumber,
+
+      ghanaCardFrontUrl:
+        input.ghanaCardFrontUrl,
+
+
+      ghanaCardBackUrl:
+        input.ghanaCardBackUrl ?? null,
+
+
+      status:"PENDING",
+
+    }
+
+  });
+
+
+  return {
+    success:true
+  };
+
+}),
+
+sellerVerificationUpsertSelfieFrame: protectedProcedure
+.use(withErrorHandling)
+.input(
+ z.object({
+   selfieUrl:z.string().url().max(2048)
+ })
+)
+
+
+.mutation(async({input,ctx})=>{
+
+
+ await prisma.sellerVerification.upsert({
+
+  where:{
+    userId:ctx.user.id
+  },
+
+
+  create:{
+
+    userId:ctx.user.id,
+
+    ghanaCardNumber:"PENDING",
+
+    ghanaCardFrontUrl:"",
+
+    ghanaCardBackUrl:null,
+
+
+    selfieUrl:
+      input.selfieUrl,
+
+
+    shop_address:"",
+    shop_city:"",
+    shop_region:"",
+
+
+    latitude:0,
+    longitude:0,
+
+
+    status:"PENDING",
+
+  },
+
+
+  update:{
+
+    selfieUrl:
+      input.selfieUrl,
+
+
+    status:"PENDING"
+
+  }
+
+
+ });
+
+
+ return {
+   success:true
+ };
+
+
+}),
+
+sellerVerificationSubmitLocation: protectedProcedure
+.use(withErrorHandling)
+
+.input(
+  z.object({
+    latitude: z.number(),
+    longitude: z.number(),
+    shopRegion: z.string().min(1).max(100),
+    shopCity: z.string().min(1).max(100),
+    shopTown: z.string().min(1).max(100),
+    shopAddress: z.string().min(1).max(500),
+  })
+)
+
+.mutation(async ({ input, ctx }) => {
+  const userId = ctx.user.id;
+
+  const updated = await prisma.sellerVerification.update({
+    where: { userId },
+    data: {
+      latitude: new Prisma.Decimal(input.latitude),
+      longitude: new Prisma.Decimal(input.longitude),
+
+      // UI fields
+      shop_region: input.shopRegion,
+      shop_city: input.shopCity,
+      shop_address: input.shopAddress,
+
+      // The schema has no dedicated "town" field; keep town in notes for now.
+      notes: input.shopTown,
+
+      isLocationVerified: true,
+      status: "UNDER_REVIEW",
+    },
+    select: {
+      id: true,
+      status: true,
+      isLocationVerified: true,
+      latitude: true,
+      longitude: true,
+      shop_region: true,
+      shop_city: true,
+      shop_address: true,
+      notes: true,
+      updatedAt: true,
+    },
+  });
+
+  return {
+    success: true,
+    updated,
+  };
+}),
+
 
   sendOtp: protectedProcedure
     .use(withErrorHandling)
     .input(
       z.object({
-        phone: z.string().regex(/^\+233[0-9]{9}$/, "Use Ghana format: +233XXXXXXXXX"),
-        purpose: z.enum(["PHONE_VERIFICATION", "PASSWORD_RESET", "LOGIN"]),
+        phone: z
+          .string()
+          .regex(/^\+233[0-9]{9}$/, "Use Ghana format: +233XXXXXXXXX"),
+        purpose: z.nativeEnum(OtpPurpose),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -103,6 +535,7 @@ export const authRouter = createTRPCRouter({
       });
       return { success: true };
     }),
+    
 
   verifyOtp: protectedProcedure
     .use(withErrorHandling)
@@ -110,14 +543,64 @@ export const authRouter = createTRPCRouter({
       z.object({
         phone: z.string(),
         code: z.string().length(6),
-        purpose: z.enum(["PHONE_VERIFICATION", "PASSWORD_RESET", "LOGIN"]),
+        purpose: z.nativeEnum(OtpPurpose), // Fixed: Fully synced with all 4 schema enums
       })
     )
     .mutation(async ({ input, ctx }) => {
       await authService.verifyOtp({
-        ...input,
+        phone: input.phone,
+        code: input.code,
+        purpose: input.purpose,
         userId: ctx.user.id,
       });
+      return { success: true };
+    }),
+
+  sendEmailVerification: protectedProcedure
+    .use(withErrorHandling)
+    .mutation(async ({ ctx }) => {
+      await authService.sendEmailVerification({
+        userId: ctx.user.id,
+        email: ctx.user.email,
+      });
+      return { success: true };
+    }),
+
+  // Allow verifying email codes from the public flow (user may be unauthenticated)
+  verifyEmailOtp: publicProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        email: z.string().email(),
+        code: z.string().length(6),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const user = await prisma.user.findFirst({ where: { email: input.email.toLowerCase(), deletedAt: null } });
+      if (!user) throw new Error("Invalid verification request");
+
+      await authService.verifyOtp({
+        phone: input.email,
+        code: input.code,
+        purpose: OtpPurpose.EMAIL_VERIFICATION,
+        userId: user.id,
+      });
+      return { success: true };
+    }),
+
+  // Public resend for email verification (does not reveal account existence)
+  resendEmailVerification: publicProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        email: z.string().email(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const user = await prisma.user.findFirst({ where: { email: input.email.toLowerCase(), deletedAt: null } });
+      if (!user) return { success: true };
+
+      await authService.sendEmailVerification({ userId: user.id, email: user.email });
       return { success: true };
     }),
 
@@ -145,6 +628,18 @@ export const authRouter = createTRPCRouter({
     .mutation(async ({ input }) => {
       await authService.resetPassword(input);
       return { success: true };
+    }),
+
+  resendResetCode: publicProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        email: z.string().email(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const result = await authService.resendPasswordResetCode(input.email);
+      return result;
     }),
 
   changePassword: protectedProcedure

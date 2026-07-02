@@ -1,9 +1,14 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import type { AuthUser } from "@/lib/auth/get-auth-user";
 
-const AuthInitialContext = createContext<AuthUser | null | undefined>(undefined);
+type AuthContextValue = {
+  user: AuthUser | null;
+  updateAuthUser: (next: AuthUser | null) => void;
+};
+
+const AuthInitialContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthInitialProvider({
   children,
@@ -12,13 +17,27 @@ export function AuthInitialProvider({
   children: React.ReactNode;
   initialUser: AuthUser | null;
 }) {
-  return (
-    <AuthInitialContext.Provider value={initialUser}>
-      {children}
-    </AuthInitialContext.Provider>
+  const [user, setUser] = useState<AuthUser | null>(initialUser);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      updateAuthUser: setUser,
+    }),
+    [user]
   );
+
+  return <AuthInitialContext.Provider value={value}>{children}</AuthInitialContext.Provider>;
 }
 
 export function useInitialAuthUser() {
-  return useContext(AuthInitialContext);
+  const ctx = useContext(AuthInitialContext);
+  return ctx?.user;
 }
+
+export function useAuthUser() {
+  const ctx = useContext(AuthInitialContext);
+  if (!ctx) throw new Error("useAuthUser must be used within AuthInitialProvider");
+  return ctx;
+}
+

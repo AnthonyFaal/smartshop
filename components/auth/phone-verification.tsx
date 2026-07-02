@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OtpPurpose } from "@prisma/client";
 
 interface PhoneVerificationProps {
   currentPhone?: string | null;
@@ -48,6 +49,8 @@ export function PhoneVerification({
     );
   }
 
+  const isPending = sendOtp.isPending || verifyOtp.isPending;
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -58,7 +61,7 @@ export function PhoneVerification({
           placeholder="+233XXXXXXXXX"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          disabled={step === "code"}
+          disabled={step === "code" || isPending}
         />
         <p className="text-xs text-zinc-500">
           Format: +233 followed by 9 digits (e.g. +233241234567)
@@ -75,6 +78,7 @@ export function PhoneVerification({
             placeholder="000000"
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            disabled={isPending}
           />
         </div>
       )}
@@ -84,9 +88,9 @@ export function PhoneVerification({
           <Button
             type="button"
             onClick={() =>
-              sendOtp.mutate({ phone, purpose: "PHONE_VERIFICATION" })
+              sendOtp.mutate({ phone, purpose: OtpPurpose.PHONE_VERIFICATION })
             }
-            disabled={sendOtp.isPending || !phone.match(/^\+233[0-9]{9}$/)}
+            disabled={isPending || !phone.match(/^\+233[0-9]{9}$/)}
           >
             {sendOtp.isPending ? "Sending..." : "Send verification code"}
           </Button>
@@ -98,10 +102,10 @@ export function PhoneVerification({
                 verifyOtp.mutate({
                   phone,
                   code,
-                  purpose: "PHONE_VERIFICATION",
+                  purpose: OtpPurpose.PHONE_VERIFICATION,
                 })
               }
-              disabled={verifyOtp.isPending || code.length !== 6}
+              disabled={isPending || code.length !== 6}
             >
               {verifyOtp.isPending ? "Verifying..." : "Verify code"}
             </Button>
@@ -112,6 +116,7 @@ export function PhoneVerification({
                 setStep("phone");
                 setCode("");
               }}
+              disabled={isPending}
             >
               Change number
             </Button>

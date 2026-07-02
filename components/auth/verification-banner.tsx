@@ -10,12 +10,14 @@ import { Button } from "@/components/ui/button";
 export function VerificationBanner() {
   const initialUser = useInitialAuthUser();
   const { data: user } = trpc.auth.me.useQuery(undefined, {
-    initialData: initialUser ?? undefined,
-    staleTime: 60_000,
+    enabled: initialUser === undefined,
   });
+
+  const resolvedUser = initialUser ?? user;
+
   const [dismissed, setDismissed] = useState(false);
 
-  if (!user || user.phoneVerified || dismissed) return null;
+  if (!resolvedUser || resolvedUser.phoneVerified || dismissed) return null;
 
   return (
     <div

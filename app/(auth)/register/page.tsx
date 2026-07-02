@@ -54,6 +54,16 @@ export default function RegisterPage() {
     onSuccess: async (data) => {
       await utils.auth.me.invalidate();
       toast.success("Account created successfully!");
+
+      const email = data.email ?? "";
+      const isEmailVerified = Boolean(data.emailVerified);
+
+      // If email is not verified yet, force the user into the verify-email flow.
+      if (!isEmailVerified) {
+        router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+
       if (data.phone && !data.phoneVerified) {
         router.push("/settings");
       } else {

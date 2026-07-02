@@ -8,8 +8,337 @@ import { prisma } from "@/lib/db/prisma";
 import { Errors } from "@/server/errors";
 import { calculateTrustScore } from "@/server/services/trust.service";
 import { createNotification } from "@/lib/notifications/service";
+import { getPlanLimits } from "@/lib/config/subscriptions";
+import { SubscriptionPlan, SubscriptionStatus, NotificationChannel, NotificationType } from "@prisma/client";
 
 export const adminRouter = createTRPCRouter({
+  mySubscription: adminProcedure
+    .use(withErrorHandling)
+    .input(z.object({
+      userId: z.string().uuid(),
+    }))
+    .query(async ({ input }) => {
+      const subscription = await prisma.subscription.findUnique({
+        where: { userId: input.userId },
+      });
+      return subscription;
+    }),
+
+  subscriptionList: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        status: z
+          .enum([
+            "ACTIVE",
+            "PAST_DUE",
+            "CANCELLED",
+            "EXPIRED",
+            "TRIALING",
+          ])
+          .optional(),
+        plan: z
+          .enum([
+            "FREE",
+            "STARTER",
+            "BUSINESS",
+            "ENTERPRISE",
+          ])
+          .optional(),
+        limit: z.number().min(1).max(50).optional(),
+        cursor: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const limit = input.limit ?? 20;
+      const items = await prisma.subscription.findMany({
+        where: {
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.plan ? { plan: input.plan } : {}),
+        },
+        take: limit + 1,
+        ...(input.cursor
+          ? { cursor: { id: input.cursor }, skip: 1 }
+          : {}),
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              phone: true,
+              profile: true,
+            },
+          },
+        },
+      });
+
+      let nextCursor: string | undefined;
+      if (items.length > limit) {
+        const next = items.pop();
+        nextCursor = next?.id;
+      }
+
+      return { items, nextCursor };
+    }),
+
+  upsertSubscription: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        plan: z.nativeEnum(SubscriptionPlan).optional(),
+        status: z.nativeEnum(SubscriptionStatus).optional(),
+        currentPeriodStart: z.date().optional(),
+        currentPeriodEnd: z.date().optional(),
+        cancelAtPeriodEnd: z.boolean().optional(),
+        providerRef: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const existing = await prisma.subscription.findUnique({
+        where: { userId: input.userId },
+      });
+
+      const now = new Date();
+      const next = {
+        plan: input.plan ?? existing?.plan ?? "FREE",
+        status: input.status ?? existing?.status ?? "ACTIVE",
+        currentPeriodStart: input.currentPeriodStart ?? existing?.currentPeriodStart ?? now,
+        currentPeriodEnd:
+          input.currentPeriodEnd ?? existing?.currentPeriodEnd ?? now,
+        cancelAtPeriodEnd:
+          input.cancelAtPeriodEnd ?? existing?.cancelAtPeriodEnd ?? false,
+        providerRef: input.providerRef ?? existing?.providerRef ?? null,
+      };
+
+      await prisma.subscription.upsert({
+        where: { userId: input.userId },
+        create: {
+          userId: input.userId,
+          ...next,
+        },
+        update: {
+          ...next,
+        },
+      });
+
+      return { success: true };
+    }),
+
+  updateSubscription: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        subscriptionId: z.string().uuid(),
+        plan: z.nativeEnum(SubscriptionPlan).optional(),
+        status: z.nativeEnum(SubscriptionStatus).optional(),
+        currentPeriodStart: z.date().optional(),
+        currentPeriodEnd: z.date().optional(),
+        cancelAtPeriodEnd: z.boolean().optional(),
+        providerRef: z.string().nullable().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await prisma.subscription.update({
+        where: { id: input.subscriptionId },
+        data: {
+          ...(input.plan ? { plan: input.plan } : {}),
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.currentPeriodStart
+            ? { currentPeriodStart: input.currentPeriodStart }
+            : {}),
+          ...(input.currentPeriodEnd
+            ? { currentPeriodEnd: input.currentPeriodEnd }
+            : {}),
+          ...(input.cancelAtPeriodEnd !== undefined
+            ? { cancelAtPeriodEnd: input.cancelAtPeriodEnd }
+            : {}),
+          ...(input.providerRef !== undefined
+            ? { providerRef: input.providerRef }
+            : {}),
+        },
+      });
+
+      const sub = await prisma.subscription.findUnique({
+        where: { id: input.subscriptionId },
+        include: { user: true },
+      });
+
+      if (sub) {
+        await createNotification({
+          userId: sub.userId,
+          type: "SYSTEM",
+          title: "Subscription Updated",
+          body: "Your seller subscription has been updated by the admin team.",
+          channels: ["IN_APP"],
+        });
+      }
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "UPDATE",
+          entityType: "Subscription",
+          entityId: input.subscriptionId,
+          newValues: {
+            ...input,
+          },
+        },
+      });
+
+      return { success: true };
+    }),
+
+  cancelSubscription: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const sub = await prisma.subscription.findUnique({
+        where: { userId: input.userId },
+      });
+      if (!sub) throw Errors.notFound("Subscription");
+
+      const updated = await prisma.subscription.update({
+        where: { userId: input.userId },
+        data: {
+          cancelAtPeriodEnd: true,
+          ...(sub.status === "ACTIVE" ? { status: "PAST_DUE" } : {}),
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "UPDATE",
+          entityType: "Subscription",
+          entityId: updated.id,
+          newValues: { cancelAtPeriodEnd: true, reason: input.reason ?? null },
+        },
+      });
+
+      await createNotification({
+        userId: updated.userId,
+        type: "SYSTEM",
+        title: "Subscription Cancellation Scheduled",
+        body:
+          input.reason ??
+          "Your subscription will be cancelled at the end of the current period.",
+        channels: ["IN_APP"],
+      });
+
+      return { success: true };
+    }),
+
+  activateSubscription: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        plan: z.nativeEnum(SubscriptionPlan).optional(),
+        periodStart: z.date().optional(),
+        periodEnd: z.date().optional(),
+        providerRef: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const sub = await prisma.subscription.findUnique({
+        where: { userId: input.userId },
+      });
+
+      const now = new Date();
+      const next = await prisma.subscription.upsert({
+        where: { userId: input.userId },
+        create: {
+          userId: input.userId,
+          plan: input.plan ?? "FREE",
+          status: "ACTIVE",
+          currentPeriodStart: input.periodStart ?? now,
+          currentPeriodEnd: input.periodEnd ?? now,
+          cancelAtPeriodEnd: false,
+          providerRef: input.providerRef ?? null,
+        },
+        update: {
+          plan: input.plan ?? sub?.plan ?? "FREE",
+          status: "ACTIVE",
+          currentPeriodStart: input.periodStart ?? sub?.currentPeriodStart ?? now,
+          currentPeriodEnd: input.periodEnd ?? sub?.currentPeriodEnd ?? now,
+          cancelAtPeriodEnd: false,
+          providerRef:
+            input.providerRef !== undefined
+              ? input.providerRef
+              : sub?.providerRef ?? null,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "APPROVE",
+          entityType: "Subscription",
+          entityId: next.id,
+          newValues: { activated: true },
+        },
+      });
+
+      await createNotification({
+        userId: next.userId,
+        type: "SYSTEM",
+        title: "Subscription Activated",
+        body: "Your seller subscription is now active.",
+        channels: ["IN_APP"],
+      });
+
+      return { success: true };
+    }),
+
+  expireSubscription: adminProcedure
+    .use(withErrorHandling)
+    .input(z.object({ userId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const sub = await prisma.subscription.findUnique({
+        where: { userId: input.userId },
+      });
+      if (!sub) throw Errors.notFound("Subscription");
+
+      const updated = await prisma.subscription.update({
+        where: { userId: input.userId },
+        data: { status: "EXPIRED", cancelAtPeriodEnd: false },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "UPDATE",
+          entityType: "Subscription",
+          entityId: updated.id,
+          newValues: { expired: true },
+        },
+      });
+
+      await createNotification({
+        userId: updated.userId,
+        type: "SYSTEM",
+        title: "Subscription Expired",
+        body: "Your seller subscription has expired.",
+        channels: ["IN_APP"],
+      });
+
+      return { success: true };
+    }),
+
+  subscriptionLimitsForPlan: adminProcedure
+    .use(withErrorHandling)
+    .input(z.object({ plan: z.nativeEnum(SubscriptionPlan) }))
+    .query(async ({ input }) => {
+      return getPlanLimits(input.plan);
+    }),
+
   dashboard: adminProcedure.use(withErrorHandling).query(async () => {
     const [
       totalUsers,
@@ -22,7 +351,11 @@ export const adminRouter = createTRPCRouter({
     ] = await Promise.all([
       prisma.user.count({ where: { deletedAt: null } }),
       prisma.user.count({ where: { role: "SELLER", deletedAt: null } }),
-      prisma.sellerVerification.count({ where: { status: "PENDING" } }),
+      prisma.sellerVerification.count({
+        where: {
+          status: { in: ["PENDING", "UNDER_REVIEW"] },
+        },
+      }),
       prisma.product.count({ where: { deletedAt: null, status: "ACTIVE" } }),
       prisma.order.count(),
       prisma.dispute.count({ where: { status: "OPEN" } }),
@@ -48,7 +381,13 @@ export const adminRouter = createTRPCRouter({
     .input(
       z.object({
         status: z
-          .enum(["PENDING", "UNDER_REVIEW", "APPROVED", "REJECTED"])
+          .enum([
+            "PENDING",
+            "UNDER_REVIEW",
+            "APPROVED",
+            "REJECTED",
+            "SUSPENDED",
+          ])
           .optional(),
         cursor: z.string().uuid().optional(),
         limit: z.number().min(1).max(50).optional(),
@@ -56,8 +395,14 @@ export const adminRouter = createTRPCRouter({
     )
     .query(async ({ input }) => {
       const limit = input.limit ?? 20;
+      const reviewStatuses: Array<"PENDING" | "UNDER_REVIEW"> = [
+        "PENDING",
+        "UNDER_REVIEW",
+      ];
       const items = await prisma.sellerVerification.findMany({
-        where: input.status ? { status: input.status } : undefined,
+        where: input.status
+          ? { status: input.status }
+          : { status: { in: reviewStatuses } },
         take: limit + 1,
         ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
         orderBy: { createdAt: "asc" },
@@ -67,6 +412,7 @@ export const adminRouter = createTRPCRouter({
               id: true,
               email: true,
               phone: true,
+              phoneVerified: true,
               profile: true,
               trustScore: true,
             },
@@ -81,6 +427,319 @@ export const adminRouter = createTRPCRouter({
       }
 
       return { items, nextCursor };
+    }),
+
+  sellerVerificationById: adminProcedure
+    .use(withErrorHandling)
+    .input(z.object({ verificationId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const verification = await prisma.sellerVerification.findUnique({
+        where: { id: input.verificationId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              phone: true,
+              phoneVerified: true,
+              profile: true,
+              trustScore: true,
+            },
+          },
+          // Note: we don’t have per-step models; decision history is the audit log.
+        },
+      });
+
+      if (!verification) throw Errors.notFound("Verification");
+
+      const audit = await prisma.auditLog.findMany({
+        where: {
+          entityType: "SellerVerification",
+          entityId: verification.id,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
+
+      return { verification, audit };
+    }),
+
+  approveGhanaCard: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const verification = await prisma.sellerVerification.findUnique({
+        where: { id: input.verificationId },
+      });
+      if (!verification) throw Errors.notFound("Verification");
+
+      // Best-effort consistency with current schema (single status field):
+      // approveGhanaCard sets UNDER_REVIEW to indicate partial progress.
+      await prisma.sellerVerification.update({
+        where: { id: input.verificationId },
+        data: {
+          status: "UNDER_REVIEW",
+          reviewedBy: ctx.user.id,
+          reviewedAt: new Date(),
+          notes: input.notes,
+        },
+      });
+
+      await createNotification({
+        userId: verification.userId,
+        type: "VERIFICATION",
+        title: "Ghana Card Review Approved",
+        body: "Your Ghana Card has been approved. Next, our team will review the rest of your verification.",
+        channels: ["IN_APP", "EMAIL", "SMS"],
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "APPROVE",
+          entityType: "SellerVerification",
+          entityId: input.verificationId,
+          newValues: { step: "GHANA_CARD", notes: input.notes ?? null },
+        },
+      });
+
+      return { success: true };
+    }),
+
+  rejectGhanaCard: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        reason: z.string().min(10),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const verification = await prisma.sellerVerification.findUnique({
+        where: { id: input.verificationId },
+      });
+      if (!verification) throw Errors.notFound("Verification");
+
+      await prisma.sellerVerification.update({
+        where: { id: input.verificationId },
+        data: {
+          status: "REJECTED",
+          reviewedBy: ctx.user.id,
+          reviewedAt: new Date(),
+          rejectionReason: input.reason,
+        },
+      });
+
+      await createNotification({
+        userId: verification.userId,
+        type: "VERIFICATION",
+        title: "Ghana Card Review Rejected",
+        body: input.reason,
+        channels: ["IN_APP", "EMAIL"],
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "REJECT",
+          entityType: "SellerVerification",
+          entityId: input.verificationId,
+          newValues: { step: "GHANA_CARD", reason: input.reason },
+        },
+      });
+
+      return { success: true };
+    }),
+
+  requestGhanaCardResubmission: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        reason: z.string().min(10),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const verification = await prisma.sellerVerification.findUnique({
+        where: { id: input.verificationId },
+      });
+      if (!verification) throw Errors.notFound("Verification");
+
+      // Best-effort with current schema: reset overall to PENDING.
+      await prisma.sellerVerification.update({
+        where: { id: input.verificationId },
+        data: {
+          status: "PENDING",
+          reviewedBy: ctx.user.id,
+          reviewedAt: new Date(),
+          rejectionReason: input.reason,
+          notes: null,
+        },
+      });
+
+      await createNotification({
+        userId: verification.userId,
+        type: "VERIFICATION",
+        title: "Resubmit Ghana Card Required",
+        body: input.reason,
+        channels: ["IN_APP", "EMAIL"],
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "UPDATE",
+          entityType: "SellerVerification",
+          entityId: input.verificationId,
+          newValues: { step: "GHANA_CARD", resubmissionReason: input.reason },
+        },
+      });
+
+      return { success: true };
+    }),
+
+  approveGpsLocation: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const verification = await prisma.sellerVerification.findUnique({
+        where: { id: input.verificationId },
+      });
+      if (!verification) throw Errors.notFound("Verification");
+
+      await prisma.sellerVerification.update({
+        where: { id: input.verificationId },
+        data: {
+          status: "UNDER_REVIEW",
+          reviewedBy: ctx.user.id,
+          reviewedAt: new Date(),
+          notes: input.notes,
+        },
+      });
+
+      await createNotification({
+        userId: verification.userId,
+        type: "VERIFICATION",
+        title: "GPS/Campus Location Approved",
+        body: "Your GPS/campus location has been approved. Next, our team will confirm the final verification.",
+        channels: ["IN_APP", "EMAIL", "SMS"],
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "APPROVE",
+          entityType: "SellerVerification",
+          entityId: input.verificationId,
+          newValues: { step: "GPS_LOCATION", notes: input.notes ?? null },
+        },
+      });
+
+      return { success: true };
+    }),
+
+  rejectGpsLocation: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        reason: z.string().min(10),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const verification = await prisma.sellerVerification.findUnique({
+        where: { id: input.verificationId },
+      });
+      if (!verification) throw Errors.notFound("Verification");
+
+      await prisma.sellerVerification.update({
+        where: { id: input.verificationId },
+        data: {
+          status: "REJECTED",
+          reviewedBy: ctx.user.id,
+          reviewedAt: new Date(),
+          rejectionReason: input.reason,
+        },
+      });
+
+      await createNotification({
+        userId: verification.userId,
+        type: "VERIFICATION",
+        title: "GPS/Campus Location Rejected",
+        body: input.reason,
+        channels: ["IN_APP", "EMAIL"],
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "REJECT",
+          entityType: "SellerVerification",
+          entityId: input.verificationId,
+          newValues: { step: "GPS_LOCATION", reason: input.reason },
+        },
+      });
+
+      return { success: true };
+    }),
+
+  requestGpsLocationResubmission: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        verificationId: z.string().uuid(),
+        reason: z.string().min(10),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const verification = await prisma.sellerVerification.findUnique({
+        where: { id: input.verificationId },
+      });
+      if (!verification) throw Errors.notFound("Verification");
+
+      await prisma.sellerVerification.update({
+        where: { id: input.verificationId },
+        data: {
+          status: "PENDING",
+          reviewedBy: ctx.user.id,
+          reviewedAt: new Date(),
+          rejectionReason: input.reason,
+          notes: null,
+        },
+      });
+
+      await createNotification({
+        userId: verification.userId,
+        type: "VERIFICATION",
+        title: "Resubmit GPS/Campus Location Required",
+        body: input.reason,
+        channels: ["IN_APP", "EMAIL"],
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId: ctx.user.id,
+          action: "UPDATE",
+          entityType: "SellerVerification",
+          entityId: input.verificationId,
+          newValues: {
+            step: "GPS_LOCATION",
+            resubmissionReason: input.reason,
+          },
+        },
+      });
+
+      return { success: true };
     }),
 
   approveSeller: adminProcedure

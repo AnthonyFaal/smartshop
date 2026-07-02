@@ -1,18 +1,22 @@
+// auth.service.ts
+
 import { prisma } from "@/lib/db/prisma";
 import { hashPassword, verifyPassword, validatePasswordStrength } from "@/lib/auth/password";
-import {
-  createSession,
-  setAuthCookies,
-  destroySession,
-} from "@/lib/auth/session";
+import { createSession, setAuthCookies, destroySession } from "@/lib/auth/session";
 import { redis, cacheKeys } from "@/lib/redis/client";
 import { Errors } from "@/server/errors";
 import { createNotification } from "@/lib/notifications/service";
-import type { OtpPurpose } from "@prisma/client";
+import { getHtmlTemplates, getPlainNotificationText } from "@/lib/notifications/templates";
+import { OtpPurpose } from "@prisma/client";
 import { randomInt } from "crypto";
 
 const OTP_EXPIRY_SECONDS = 600;
 const OTP_MAX_ATTEMPTS = 5;
+
+function formatExpiryText(expiresInSeconds: number) {
+  const minutes = Math.ceil(expiresInSeconds / 60);
+  return minutes <= 1 ? "1 minute" : `${minutes} minutes`;
+}
 
 export async function registerUser(input: {
   email: string;
@@ -86,6 +90,15 @@ export async function registerUser(input: {
     return created;
   });
 
+  // Email verification enforcement for registration:
+  // - Always send the verification code
+  // - Only create an auth session + cookies if email is already verified
+  //   (typically not the case for new users).
+  if (!user.emailVerified) {
+    await sendEmailVerification({ userId: user.id, email: user.email });
+    return { user, sessionId: null };
+  }
+
   const session = await createSession(user, {
     userAgent: input.userAgent,
     ipAddress: input.ipAddress,
@@ -117,6 +130,11 @@ export async function loginUser(input: {
     throw Errors.forbidden("Your account has been suspended");
   }
 
+  if (!user.emailVerified) {
+    await sendEmailVerification({ userId: user.id, email: user.email });
+    throw Errors.forbidden("EMAIL_VERIFICATION_REQUIRED");
+  }
+
   await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() },
@@ -145,6 +163,47 @@ export async function logoutUser(): Promise<void> {
   await destroySession();
 }
 
+export async function sendEmailVerification(input: {
+  userId: string;
+  email: string;
+}): Promise<void> {
+  const code = randomInt(100000, 999999).toString();
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_SECONDS * 1000);
+  const purpose = OtpPurpose.EMAIL_VERIFICATION;
+
+  await prisma.otpRecord.create({
+    data: {
+      userId: input.userId,
+      email: input.email.toLowerCase(),
+      code,
+      purpose,
+      expiresAt,
+    },
+  });
+
+  await redis.setex(cacheKeys.otp(input.email, purpose), OTP_EXPIRY_SECONDS, code);
+
+  // 1. Dispatch full styled HTML structure to the user's Email address
+  await createNotification({
+    userId: input.userId,
+    type: "VERIFICATION",
+    title: "Verify your email",
+    body: getHtmlTemplates.emailVerification(code, formatExpiryText(OTP_EXPIRY_SECONDS)),
+    channels: ["EMAIL"],
+  });
+
+  // 2. Dispatch a clean plain-text fallback string to your In-App notifications bell feed
+  await createNotification({
+    userId: input.userId,
+    type: "VERIFICATION",
+    title: "Verify your email",
+    body: getPlainNotificationText.emailVerification(code),
+    channels: ["IN_APP"],
+  });
+
+  console.info(`[Email Verification] Code for ${input.email}: ${code}`);
+}
+
 export async function sendOtp(input: {
   phone: string;
   purpose: OtpPurpose;
@@ -163,19 +222,15 @@ export async function sendOtp(input: {
     },
   });
 
-  await redis.setex(
-    cacheKeys.otp(input.phone, input.purpose),
-    OTP_EXPIRY_SECONDS,
-    code
-  );
+  await redis.setex(cacheKeys.otp(input.phone, input.purpose), OTP_EXPIRY_SECONDS, code);
 
-  // SMS dispatch via notification service (logs OTP in dev when SMS is not configured)
   if (input.userId) {
+    // SMS and In-App feeds share plain text natively without needing structural layout partitions
     await createNotification({
       userId: input.userId,
       type: "VERIFICATION",
-      title: "Verification Code",
-      body: `Your SmartShop code is ${code}. Valid for 10 minutes.`,
+      title: "Your verification code",
+      body: getPlainNotificationText.phoneVerification(code),
       channels: ["SMS", "IN_APP"],
     });
   }
@@ -195,28 +250,76 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await prisma.otpRecord.create({
     data: {
       userId: user.id,
-      phone: user.phone ?? user.email,
+      email: user.email,
+      phone: user.phone,
       code,
-      purpose: "PASSWORD_RESET",
+      purpose: OtpPurpose.PASSWORD_RESET,
       expiresAt: new Date(Date.now() + OTP_EXPIRY_SECONDS * 1000),
     },
   });
 
-  await redis.setex(
-    cacheKeys.passwordReset(user.id),
-    OTP_EXPIRY_SECONDS,
-    code
-  );
+  await redis.setex(cacheKeys.passwordReset(user.id), OTP_EXPIRY_SECONDS, code);
+
+  // Send rich template layout to inbox channel
+  await createNotification({
+    userId: user.id,
+    type: "VERIFICATION",
+    title: "Password Reset request",
+    body: getHtmlTemplates.passwordReset(code, formatExpiryText(OTP_EXPIRY_SECONDS)),
+    channels: ["EMAIL"],
+  });
+
+  // Send lightweight copy to mobile lines and app panels
+  const alternativeChannels: ("SMS" | "IN_APP")[] = ["IN_APP"];
+  if (user.phone) alternativeChannels.push("SMS");
 
   await createNotification({
     userId: user.id,
     type: "VERIFICATION",
-    title: "Password Reset Code",
-    body: `Your SmartShop password reset code is ${code}. Valid for 10 minutes.`,
-    channels: user.phone ? ["SMS", "EMAIL", "IN_APP"] : ["EMAIL", "IN_APP"],
+    title: "Password Reset request",
+    body: getPlainNotificationText.passwordReset(code),
+    channels: alternativeChannels,
   });
 
   console.info(`[Password Reset] Code for ${email}: ${code}`);
+}
+
+export async function resendPasswordResetCode(email: string): Promise<{
+  success: true;
+  nextAllowedAt: number;
+}> {
+  const normalizedEmail = email.toLowerCase();
+  const user = await prisma.user.findFirst({
+    where: { email: normalizedEmail, deletedAt: null, isActive: true },
+    select: { id: true },
+  });
+
+  const identifier = user?.id ?? normalizedEmail;
+  const COOLDOWN_SECONDS = 30;
+
+  const cooldownTtl = await redis.ttl(
+    cacheKeys.otpCooldown(identifier, OtpPurpose.PASSWORD_RESET)
+  );
+
+  if (cooldownTtl > 0) {
+    return {
+      success: true,
+      nextAllowedAt: Date.now() + cooldownTtl * 1000,
+    };
+  }
+
+  await redis.setex(
+    cacheKeys.otpCooldown(identifier, OtpPurpose.PASSWORD_RESET),
+    COOLDOWN_SECONDS,
+    String(Date.now() + COOLDOWN_SECONDS * 1000)
+  );
+
+  await requestPasswordReset(normalizedEmail);
+
+  return {
+    success: true,
+    nextAllowedAt: Date.now() + COOLDOWN_SECONDS * 1000,
+  };
 }
 
 export async function resetPassword(input: {
@@ -241,7 +344,7 @@ export async function resetPassword(input: {
   const record = await prisma.otpRecord.findFirst({
     where: {
       userId: user.id,
-      purpose: "PASSWORD_RESET",
+      purpose: OtpPurpose.PASSWORD_RESET,
       verified: false,
       expiresAt: { gt: new Date() },
     },
@@ -292,9 +395,17 @@ export async function resetPassword(input: {
   await createNotification({
     userId: user.id,
     type: "SYSTEM",
-    title: "Password Updated",
-    body: "Your SmartShop password was changed successfully.",
-    channels: ["IN_APP", "EMAIL"],
+    title: "Password updated successfully",
+    body: getHtmlTemplates.passwordUpdated(),
+    channels: ["EMAIL"],
+  });
+
+  await createNotification({
+    userId: user.id,
+    type: "SYSTEM",
+    title: "Password updated successfully",
+    body: getPlainNotificationText.passwordUpdated(),
+    channels: ["IN_APP"],
   });
 }
 
@@ -337,9 +448,17 @@ export async function changePassword(input: {
   await createNotification({
     userId: user.id,
     type: "SYSTEM",
-    title: "Password Changed",
-    body: "Your password was updated. Contact support if you did not make this change.",
-    channels: ["IN_APP", "EMAIL"],
+    title: "Password Updated",
+    body: getHtmlTemplates.changePassword(),
+    channels: ["EMAIL"],
+  });
+
+  await createNotification({
+    userId: user.id,
+    type: "SYSTEM",
+    title: "Password Updated",
+    body: "Your authentication credentials have been modified successfully.",
+    channels: ["IN_APP"],
   });
 }
 
@@ -349,13 +468,14 @@ export async function verifyOtp(input: {
   purpose: OtpPurpose;
   userId: string;
 }): Promise<void> {
-  const cached = await redis.get(
-    cacheKeys.otp(input.phone, input.purpose)
-  );
+  const cached = await redis.get(cacheKeys.otp(input.phone, input.purpose));
 
   const record = await prisma.otpRecord.findFirst({
     where: {
-      phone: input.phone,
+      OR: [
+        { phone: input.phone },
+        { email: input.phone.toLowerCase() }
+      ],
       purpose: input.purpose,
       verified: false,
       expiresAt: { gt: new Date() },
@@ -386,7 +506,7 @@ export async function verifyOtp(input: {
       where: { id: record.id },
       data: { verified: true },
     }),
-    ...(input.purpose === "PHONE_VERIFICATION"
+    ...(input.purpose === OtpPurpose.PHONE_VERIFICATION
       ? [
           prisma.user.update({
             where: { id: input.userId },
@@ -398,31 +518,44 @@ export async function verifyOtp(input: {
           }),
         ]
       : []),
+    ...(input.purpose === OtpPurpose.EMAIL_VERIFICATION
+      ? [
+          prisma.user.update({
+            where: { id: input.userId },
+            data: {
+              emailVerified: true,
+            },
+          }),
+        ]
+      : []),
   ]);
 
   await redis.del(cacheKeys.otp(input.phone, input.purpose));
 
-  const notificationByPurpose = {
-    PHONE_VERIFICATION: {
-      title: "Phone Verified",
-      body: "Your phone number has been successfully verified.",
-    },
-    PASSWORD_RESET: {
-      title: "Verification Complete",
-      body: "You can now set a new password.",
-    },
-    LOGIN: {
-      title: "Login Verified",
-      body: "Phone verification for login was successful.",
-    },
-  } as const;
+  const contentMap: Record<string, string> = {
+    PHONE_VERIFICATION: getPlainNotificationText.phoneVerified(),
+    PASSWORD_RESET: "Your security identity checkpoint parameters cleared successfully.",
+    LOGIN: getPlainNotificationText.loginVerified(),
+    EMAIL_VERIFICATION: "Your primary communication line channel verification is complete."
+  };
 
-  const notification = notificationByPurpose[input.purpose];
+  const textBody = contentMap[input.purpose] || "Verification processed successfully.";
 
+  // Dispatch rich structural summary to Email
   await createNotification({
     userId: input.userId,
     type: "VERIFICATION",
-    title: notification.title,
-    body: notification.body,
+    title: "Verification Complete",
+    body: getHtmlTemplates.otpVerificationComplete(input.purpose),
+    channels: ["EMAIL"]
+  });
+
+  // Dispatch lightweight string to alternate UI views
+  await createNotification({
+    userId: input.userId,
+    type: "VERIFICATION",
+    title: "Verification Complete",
+    body: textBody,
+    channels: ["IN_APP"]
   });
 }

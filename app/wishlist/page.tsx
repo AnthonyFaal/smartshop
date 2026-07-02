@@ -8,11 +8,7 @@ import { trpc } from "@/lib/trpc/client";
 import { useInitialAuthUser } from "@/components/providers/auth-provider";
 
 export default function WishlistPage() {
-  const initialUser = useInitialAuthUser();
-  const { data: user } = trpc.auth.me.useQuery(undefined, {
-    initialData: initialUser ?? undefined,
-    staleTime: 60_000,
-  });
+  const { data: user } = trpc.auth.me.useQuery();
 
   if (!user) {
     return (

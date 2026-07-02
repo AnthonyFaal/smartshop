@@ -23,11 +23,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuth && hasSession) {
-    return NextResponse.redirect(new URL("/marketplace", request.url));
-  }
+  // Do not redirect authenticated users away from auth pages purely based on cookie presence.
+  // Email verification enforcement must be done by server-side session resolution (emailVerified) and/or
+  // the auth pages themselves, otherwise unverified users get bounced to protected areas.
 
   const response = NextResponse.next();
+  const isDevelopment = process.env.NODE_ENV === "development";
+  const imgSrcDirective = isDevelopment
+    ? "img-src 'self' data: blob: https: http://localhost:9000 http://127.0.0.1:9000;"
+    : "img-src 'self' data: blob: https:;";
 
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
@@ -35,7 +39,7 @@ export function middleware(request: NextRequest) {
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:;"
+    `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; ${imgSrcDirective} font-src 'self' data:; connect-src 'self' https:;`
   );
 
   return response;

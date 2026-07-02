@@ -7,11 +7,7 @@ import { useInitialAuthUser } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
 
 export function LandingHeroCTA() {
-  const initialUser = useInitialAuthUser();
-  const { data: user } = trpc.auth.me.useQuery(undefined, {
-    initialData: initialUser ?? undefined,
-    staleTime: 60_000,
-  });
+  const { data: user } = trpc.auth.me.useQuery();
 
   if (user) {
     return (
@@ -65,11 +61,7 @@ export function LandingHeroCTA() {
 }
 
 export function LandingBottomCTA() {
-  const initialUser = useInitialAuthUser();
-  const { data: user } = trpc.auth.me.useQuery(undefined, {
-    initialData: initialUser ?? undefined,
-    staleTime: 60_000,
-  });
+  const { data: user } = trpc.auth.me.useQuery();
 
   if (user) {
     return (
