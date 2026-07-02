@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, Store, Package, AlertTriangle, DollarSign, Shield } from "lucide-react";
+import { Users, Store, Package, AlertTriangle, DollarSign, Shield, Clock3, ArrowRight } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,12 +17,40 @@ const statCards = [
   { key: "openDisputes", label: "Open Disputes", icon: AlertTriangle },
 ] as const;
 
+type SellerQueueItemUser = {
+  email?: string | null;
+  phone?: string | null;
+  profile?: {
+    displayName?: string | null;
+  } | null;
+  trustScore?: {
+    score?: number | null;
+  } | null;
+};
+
+type SellerQueueItem = {
+  id: string;
+  shop_city?: string | null;
+  shop_region?: string | null;
+  shop_address?: string | null;
+  latitude?: unknown;
+  longitude?: unknown;
+  ghanaCardFrontUrl?: string | null;
+  ghanaCardBackUrl?: string | null;
+  ghanaCardNumber?: string | null;
+  selfieUrl?: string | null;
+  isLocationVerified?: boolean | null;
+  status?: string | null;
+  user?: SellerQueueItemUser | null;
+};
+
 export default function AdminDashboardPage() {
   const { data: stats, isLoading } = trpc.admin.dashboard.useQuery();
   const { data: sellerQueue } = trpc.admin.sellerQueue.useQuery({
-    status: "PENDING",
     limit: 5,
   });
+
+  const sellerQueueItems = (sellerQueue?.items ?? []) as SellerQueueItem[];
 
   return (
     <div className="flex min-h-full flex-col">
@@ -80,34 +108,54 @@ export default function AdminDashboardPage() {
         <div className="mt-8 grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Seller Approval Queue</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Clock3 className="h-5 w-5 text-emerald-600" />
+                Seller Review Queue
+              </CardTitle>
               <Badge variant="secondary">
-                {sellerQueue?.items.length ?? 0} pending
+                {sellerQueueItems.length} awaiting review
               </Badge>
             </CardHeader>
             <CardContent>
-              {!sellerQueue?.items.length ? (
-                <p className="text-sm text-zinc-500">No pending verifications</p>
+              {!sellerQueueItems.length ? (
+                <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-500">
+                  No seller applications are awaiting review right now.
+                </div>
               ) : (
-                <div className="space-y-4">
-                  {sellerQueue.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between rounded-lg border border-zinc-200 p-4"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {item.user.profile?.displayName ?? item.user.email}
-                        </p>
-                        <p className="text-sm text-zinc-500">
-                          {item.shop_city}, {item.shop_region}
-                        </p>
+                <div className="space-y-3">
+                  {sellerQueueItems.map((item) => {
+                    const queueLabel = item.status === "UNDER_REVIEW" ? "Under review" : "New submission";
+                    const trustScore = item.user?.trustScore?.score ?? 0;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-zinc-900">
+                              {item.user?.profile?.displayName ?? item.user?.email ?? "Seller applicant"}
+                            </p>
+                            <Badge variant="secondary">{queueLabel}</Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-zinc-500">
+                            {item.shop_city ? `${item.shop_city}, ${item.shop_region ?? ""}` : "Location details pending"}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-400">Trust score: {trustScore}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <ApproveButton verificationId={item.id} />
+                          <Button asChild size="sm" variant="outline">
+                            <Link href="/admin/verification">
+                              Review
+                              <ArrowRight className="ml-2 h-4 w-4" />
+                            </Link>
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <ApproveButton verificationId={item.id} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -116,15 +164,15 @@ export default function AdminDashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Verification Center</CardTitle>
-              <Badge variant="secondary">Manage decisions</Badge>
+              <Badge variant="secondary">Review tools</Badge>
             </CardHeader>
-            <CardContent className="flex items-center justify-between gap-4">
+            <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <p className="text-sm text-zinc-500">
-                Approve or reject seller verification requests with audit trail.
+                Open the full review workspace to inspect submitted documents and make approval decisions.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button asChild size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                  <Link href="/admin/verification">Verification Center</Link>
+                  <Link href="/admin/verification">Open review center</Link>
                 </Button>
                 <Button asChild size="sm" variant="outline">
                   <Link href="/admin/verification/ghana-card">Ghana Card</Link>

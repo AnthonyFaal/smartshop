@@ -7,7 +7,14 @@ import {
 } from "@/server/trpc/init";
 import * as authService from "@/server/services/auth.service";
 import { prisma } from "@/lib/db/prisma";
-import { OtpPurpose, Prisma } from "@prisma/client";
+import { createNotification } from "@/lib/notifications/service";
+import { getPaymentProvider } from "@/lib/payments/provider";
+import {
+  getPlanLimits,
+  getPlanMeta,
+  getPlanOrder,
+} from "@/lib/config/subscriptions";
+import { OtpPurpose, PaymentMethod, Prisma, SubscriptionPlan } from "@prisma/client";
 
 export const authRouter = createTRPCRouter({
   register: publicProcedure
@@ -138,6 +145,151 @@ export const authRouter = createTRPCRouter({
 
   return user;
 }),
+
+  subscriptionPlans: protectedProcedure
+    .use(withErrorHandling)
+    .query(async () => {
+      const offerings = await prisma.subscriptionOffering.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: "asc" },
+      });
+
+      const fallbackPlans = Object.values(SubscriptionPlan).map((plan) => ({
+        tier: plan,
+        name: getPlanMeta(plan).label,
+        priceGhs: getPlanLimits(plan).priceGhs,
+        maxProducts: getPlanLimits(plan).maxProducts,
+        aiTier: getPlanLimits(plan).aiTier,
+        analytics: getPlanLimits(plan).analytics,
+        promotions: getPlanLimits(plan).promotions,
+        multiStore: getPlanLimits(plan).multiStore,
+        teamManagement: getPlanLimits(plan).teamManagement,
+        apiAccess: getPlanLimits(plan).apiAccess,
+        freeTrialDays: 0,
+        aiDailyRequests: 0,
+        aiMaxTokensPerRequest: 0,
+        isActive: true,
+      }));
+
+      const normalized = (offerings.length ? offerings : fallbackPlans)
+        .map((offering) => {
+          const plan = offering.tier as SubscriptionPlan;
+          const limits = getPlanLimits(plan);
+          const meta = getPlanMeta(plan);
+          return {
+            tier: plan,
+            name: offering.name ?? meta.label,
+            description: meta.description,
+            badge: meta.badge,
+            accent: meta.accent,
+            isPaid: meta.isPaid,
+            priceGhs: Number(offering.priceGhs ?? limits.priceGhs ?? 0),
+            maxProducts: offering.maxProducts ?? limits.maxProducts,
+            aiTier: offering.aiTier ?? limits.aiTier,
+            analytics: offering.analytics ?? limits.analytics,
+            promotions: offering.promotions ?? limits.promotions,
+            multiStore: offering.multiStore ?? limits.multiStore,
+            teamManagement: offering.teamManagement ?? limits.teamManagement,
+            apiAccess: offering.apiAccess ?? limits.apiAccess,
+            freeTrialDays: offering.freeTrialDays ?? 0,
+            aiDailyRequests: offering.aiDailyRequests ?? 0,
+            aiMaxTokensPerRequest: offering.aiMaxTokensPerRequest ?? 0,
+            isActive: offering.isActive,
+          };
+        })
+        .sort((a, b) => getPlanOrder(a.tier) - getPlanOrder(b.tier));
+
+      return { plans: normalized };
+    }),
+
+  initializeSubscriptionCheckout: protectedProcedure
+    .use(withErrorHandling)
+    .input(z.object({ plan: z.nativeEnum(SubscriptionPlan) }))
+    .mutation(async ({ input, ctx }) => {
+      if (input.plan === SubscriptionPlan.FREE) {
+        return {
+          success: true,
+          redirectUrl: null,
+          message: "Free plan is already available by default.",
+        };
+      }
+
+      const offering = await prisma.subscriptionOffering.findFirst({
+        where: { tier: input.plan, isActive: true },
+      });
+
+      const currentSubscription = await prisma.subscription.findUnique({
+        where: { userId: ctx.user.id },
+      });
+
+      if (
+        currentSubscription?.plan === input.plan &&
+        currentSubscription.status === "ACTIVE"
+      ) {
+        return {
+          success: true,
+          redirectUrl: null,
+          message: "You already have this plan.",
+        };
+      }
+
+      const amountGhs = Number(offering?.priceGhs ?? getPlanLimits(input.plan).priceGhs ?? 0);
+      const now = new Date();
+      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      const provider = getPaymentProvider(process.env.PAYMENT_PROVIDER);
+      const result = await provider.initiate({
+        orderId: `sub_${ctx.user.id}_${Date.now()}`,
+        amount: Math.round(amountGhs * 100),
+        currency: "GHS",
+        method: PaymentMethod.CARD,
+        customerEmail: ctx.user.email,
+        customerPhone: ctx.user.phone ?? undefined,
+        metadata: {
+          plan: input.plan,
+          userId: ctx.user.id,
+          purpose: "subscription",
+        },
+      });
+
+      const nextStatus = result.status === "COMPLETED" ? "ACTIVE" : "TRIALING";
+
+      await prisma.subscription.upsert({
+        where: { userId: ctx.user.id },
+        create: {
+          userId: ctx.user.id,
+          plan: input.plan,
+          status: nextStatus,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+          providerRef: result.providerRef,
+        },
+        update: {
+          plan: input.plan,
+          status: nextStatus,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+          providerRef: result.providerRef,
+        },
+      });
+
+      await createNotification({
+        userId: ctx.user.id,
+        type: "SYSTEM",
+        title: "Subscription checkout started",
+        body: "Your subscription upgrade request is being processed.",
+        channels: ["IN_APP"],
+      });
+
+      return {
+        success: true,
+        redirectUrl: result.redirectUrl ?? null,
+        providerRef: result.providerRef,
+        message: nextStatus === "ACTIVE" ? "Your plan is now active." : "Complete payment to activate your plan.",
+      };
+    }),
 
   // ────────────────────────────────────────────────────────────────────────────
   // Seller verification (new automated flow)

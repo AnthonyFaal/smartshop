@@ -230,11 +230,9 @@ export async function updateOrderStatus(
       await tx.payment.updateMany({
         where: {
           orderId,
-          escrowHeldAt: { not: null },
-          escrowReleasedAt: null,
         },
         data: {
-          escrowReleasedAt: new Date(),
+          refundedAt: new Date(),
         },
       });
     }

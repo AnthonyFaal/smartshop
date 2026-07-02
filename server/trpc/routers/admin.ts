@@ -353,7 +353,7 @@ export const adminRouter = createTRPCRouter({
       prisma.user.count({ where: { role: "SELLER", deletedAt: null } }),
       prisma.sellerVerification.count({
         where: {
-          OR: [{ status: "PENDING" }, { status: "UNDER_REVIEW" }],
+          status: { in: ["PENDING", "UNDER_REVIEW"] },
         },
       }),
       prisma.product.count({ where: { deletedAt: null, status: "ACTIVE" } }),
@@ -395,17 +395,14 @@ export const adminRouter = createTRPCRouter({
     )
     .query(async ({ input }) => {
       const limit = input.limit ?? 20;
-      const where = input.status
-        ? { status: input.status }
-        : {
-            OR: [
-              { status: "PENDING" },
-              { status: "UNDER_REVIEW" },
-            ],
-          };
-
+      const reviewStatuses: Array<"PENDING" | "UNDER_REVIEW"> = [
+        "PENDING",
+        "UNDER_REVIEW",
+      ];
       const items = await prisma.sellerVerification.findMany({
-        where,
+        where: input.status
+          ? { status: input.status }
+          : { status: { in: reviewStatuses } },
         take: limit + 1,
         ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }),
         orderBy: { createdAt: "asc" },
@@ -415,6 +412,7 @@ export const adminRouter = createTRPCRouter({
               id: true,
               email: true,
               phone: true,
+              phoneVerified: true,
               profile: true,
               trustScore: true,
             },
@@ -443,6 +441,7 @@ export const adminRouter = createTRPCRouter({
               id: true,
               email: true,
               phone: true,
+              phoneVerified: true,
               profile: true,
               trustScore: true,
             },

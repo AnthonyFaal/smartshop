@@ -14,15 +14,31 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type ReasonState = Record<string, string>;
 
+type SellerQueueItemUser = {
+  email?: string | null;
+  profile?: {
+    displayName?: string | null;
+  } | null;
+};
+
+type SellerQueueItem = {
+  id: string;
+  shop_address?: string | null;
+  shop_city?: string | null;
+  shop_region?: string | null;
+  latitude?: unknown;
+  longitude?: unknown;
+  user?: SellerQueueItemUser | null;
+};
+
 export default function AdminGpsReviewPage() {
   const [reasonById, setReasonById] = useState<ReasonState>({});
 
   const { data, isLoading } = trpc.admin.sellerQueue.useQuery({
-    status: "PENDING",
     limit: 50,
   });
 
-  const items = data?.items ?? [];
+  const items = (data?.items ?? []) as SellerQueueItem[];
 
   return (
     <div className="flex min-h-full flex-col">
@@ -42,7 +58,7 @@ export default function AdminGpsReviewPage() {
               GPS & Campus Location Review
             </h1>
             <p className="mt-1 text-sm text-zinc-500">
-              Approve, reject, or request resubmission of stored coordinates and address.
+              Review location submissions that are waiting for approval or follow-up.
             </p>
           </div>
 
@@ -55,7 +71,7 @@ export default function AdminGpsReviewPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MapPin className="h-5 w-5 text-emerald-600" />
-              Pending GPS/Location verifications
+              GPS & location verifications
             </CardTitle>
           </CardHeader>
 
@@ -80,7 +96,7 @@ export default function AdminGpsReviewPage() {
               </div>
             ) : items.length === 0 ? (
               <p className="text-sm text-zinc-500">
-                No pending GPS/location verifications.
+                No GPS/location verifications are waiting for review right now.
               </p>
             ) : (
               <div className="space-y-4">
@@ -88,12 +104,12 @@ export default function AdminGpsReviewPage() {
                   <GpsRow
                     key={item.id}
                     verificationId={item.id}
-                    userDisplay={item.user.profile?.displayName ?? item.user.email}
-                    address={`${item.shop_address}`}
-                    city={item.shop_city}
-                    region={item.shop_region}
-                    latitude={String(item.latitude)}
-                    longitude={String(item.longitude)}
+                    userDisplay={item.user?.profile?.displayName ?? item.user?.email ?? "Seller applicant"}
+                    address={`${item.shop_address ?? "—"}`}
+                    city={item.shop_city ?? "—"}
+                    region={item.shop_region ?? "—"}
+                    latitude={String(item.latitude ?? "—")}
+                    longitude={String(item.longitude ?? "—")}
                     reason={reasonById[item.id] ?? ""}
                     setReason={(v) =>
                       setReasonById((prev) => ({ ...prev, [item.id]: v }))

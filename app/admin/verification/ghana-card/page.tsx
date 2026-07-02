@@ -15,17 +15,31 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 type ReasonState = Record<string, string>;
 
+type SellerQueueItemUser = {
+  email?: string | null;
+  profile?: {
+    displayName?: string | null;
+  } | null;
+};
+
+type SellerQueueItem = {
+  id: string;
+  ghanaCardFrontUrl?: string | null;
+  ghanaCardBackUrl?: string | null;
+  ghanaCardNumber?: string | null;
+  user?: SellerQueueItemUser | null;
+};
+
 export default function AdminGhanaCardReviewPage() {
   const [reasonById, setReasonById] = useState<ReasonState>({});
 
   // With current schema we only have one status field.
   // We still reuse the sellerQueue pattern but focus on PENDING items.
   const { data, isLoading } = trpc.admin.sellerQueue.useQuery({
-    status: "PENDING",
     limit: 50,
   });
 
-  const items = data?.items ?? [];
+  const items = (data?.items ?? []) as SellerQueueItem[];
 
   return (
     <div className="flex min-h-full flex-col">
@@ -43,7 +57,7 @@ export default function AdminGhanaCardReviewPage() {
             </div>
             <h1 className="mt-2 text-2xl font-bold text-zinc-900">Ghana Card Review</h1>
             <p className="mt-1 text-sm text-zinc-500">
-              Approve, reject, or request resubmission of Ghana Card details.
+              Review Ghana Card submissions that are waiting for approval or follow-up.
             </p>
           </div>
 
@@ -56,7 +70,7 @@ export default function AdminGhanaCardReviewPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-emerald-600" />
-              Pending Ghana Card verifications
+              Ghana Card verifications
             </CardTitle>
           </CardHeader>
 
@@ -81,7 +95,7 @@ export default function AdminGhanaCardReviewPage() {
               </div>
             ) : items.length === 0 ? (
               <p className="text-sm text-zinc-500">
-                No pending Ghana Card verifications.
+                No Ghana Card verifications are waiting for review right now.
               </p>
             ) : (
               <div className="space-y-4">
@@ -89,9 +103,9 @@ export default function AdminGhanaCardReviewPage() {
                   <GhanaCardRow
                     key={item.id}
                     verificationId={item.id}
-                    userDisplay={item.user.profile?.displayName ?? item.user.email}
-                    ghanaNumber={item.ghanaCardNumber}
-                    frontUrl={item.ghanaCardFrontUrl}
+                    userDisplay={item.user?.profile?.displayName ?? item.user?.email ?? "Seller applicant"}
+                    ghanaNumber={item.ghanaCardNumber ?? "—"}
+                    frontUrl={item.ghanaCardFrontUrl ?? "—"}
                     backUrl={item.ghanaCardBackUrl ?? null}
                     reason={reasonById[item.id] ?? ""}
                     setReason={(v) =>

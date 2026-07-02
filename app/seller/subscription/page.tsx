@@ -15,23 +15,22 @@ import { trpc } from "@/lib/trpc/client";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils/format";
 
-
-type Limits = {
-  maxProducts: number;
+type PlanCardData = {
+  tier: string;
+  name: string;
+  description: string;
+  badge: string;
+  accent: string;
+  isPaid: boolean;
+  priceGhs: number;
+  maxProducts: number | null;
   aiTier: string;
   analytics: boolean;
   promotions: boolean;
   multiStore: boolean;
   teamManagement: boolean;
   apiAccess: boolean;
-  priceGhs: number;
-};
-
-const PLAN_TITLES: Record<string, string> = {
-  FREE: "Free",
-  STARTER: "Starter",
-  BUSINESS: "Business",
-  ENTERPRISE: "Enterprise",
+  isActive: boolean;
 };
 
 function formatStatus(status: string | null | undefined) {
@@ -61,138 +60,139 @@ function formatLimitValue(value: number, label: string) {
 }
 
 export default function SellerSubscriptionPage() {
-  const { data: me, isLoading } = trpc.auth.me.useQuery();
+  const utils = trpc.useUtils();
+  const { data: me, isLoading: meLoading } = trpc.auth.me.useQuery();
+  const { data: plansData, isLoading: plansLoading } = trpc.auth.subscriptionPlans.useQuery();
+  const checkout = trpc.auth.initializeSubscriptionCheckout.useMutation({
+    onSuccess: async () => {
+      await utils.auth.me.invalidate();
+      await utils.auth.subscriptionPlans.invalidate();
+    },
+  });
 
   const plan = me?.subscription?.plan ?? "FREE";
   const status = me?.subscription?.status ?? "EXPIRED";
-
-  // After migration + TRPC offering endpoints are added, this page should query
-  // active SubscriptionOffering (versioned) by seller.subscription.plan tier.
-  // For now we keep the UI functional.
-  const limits: Limits = {
-    maxProducts: 0,
-    aiTier: "basic",
-    analytics: false,
-    promotions: false,
-    multiStore: false,
-    teamManagement: false,
-    apiAccess: false,
-    priceGhs: 0,
-  };
-
-
-
+  const plans = (plansData?.plans ?? []) as PlanCardData[];
 
   return (
     <PageShell showVerificationBanner>
       <SellerPageShell activeHref="/seller/subscription">
-        <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6">
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-zinc-900">Subscription</h1>
+              <h1 className="text-2xl font-bold text-zinc-900">Seller subscriptions</h1>
               <p className="mt-1 text-sm text-zinc-500">
-                Admins manage subscription upgrades and cancellations.
+                Choose the plan that fits your selling goals. Paid plans are processed through the configured checkout provider.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">
-                {isLoading ? "Loading…" : PLAN_TITLES[plan] ?? plan}
+                {meLoading ? "Loading…" : plan}
               </Badge>
               <Badge variant="outline">{formatStatus(status)}</Badge>
             </div>
           </div>
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Your plan limits</CardTitle>
-                <CardDescription>
-                  Limits apply to your seller account. Updated by admin actions.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="space-y-3">
-                    <div className="h-4 w-2/3 animate-pulse rounded bg-zinc-100" />
-                    <div className="h-4 w-5/6 animate-pulse rounded bg-zinc-100" />
-                    <div className="h-4 w-4/5 animate-pulse rounded bg-zinc-100" />
-                  </div>
-                ) : (
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center justify-between gap-3">
-                      <span className="text-zinc-600">Max products</span>
-                      <span className="font-medium">
-                        {formatLimitValue(limits.maxProducts as number, "maxProducts")}
-                      </span>
-                    </li>
-                    <li className="flex items-center justify-between gap-3">
-                      <span className="text-zinc-600">AI tier</span>
-                      <span className="font-medium">{limits.aiTier}</span>
-                    </li>
-                    <li className="flex items-center justify-between gap-3">
-                      <span className="text-zinc-600">Analytics</span>
-                      <span className="font-medium">
-                        {limits.analytics ? "Included" : "Not included"}
-                      </span>
-                    </li>
-                    <li className="flex items-center justify-between gap-3">
-                      <span className="text-zinc-600">Promotions</span>
-                      <span className="font-medium">
-                        {limits.promotions ? "Included" : "Not included"}
-                      </span>
-                    </li>
-                    <li className="flex items-center justify-between gap-3">
-                      <span className="text-zinc-600">Multi-store</span>
-                      <span className="font-medium">
-                        {limits.multiStore ? "Included" : "Not included"}
-                      </span>
-                    </li>
-                    <li className="flex items-center justify-between gap-3">
-                      <span className="text-zinc-600">Team management</span>
-                      <span className="font-medium">
-                        {limits.teamManagement ? "Included" : "Not included"}
-                      </span>
-                    </li>
-                    <li className="flex items-center justify-between gap-3">
-                      <span className="text-zinc-600">API access</span>
-                      <span className="font-medium">
-                        {limits.apiAccess ? "Included" : "Not included"}
-                      </span>
-                    </li>
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Administration</CardTitle>
-                <CardDescription>
-                  To change your subscription, contact the admin team.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 text-sm">
-                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-zinc-700">
-                    <p className="font-medium">No self-serve checkout yet</p>
-                    <p className="mt-1">
-                      This app currently lets admins perform CRUD operations on subscriptions.
-                      Sellers can view the active plan and its limits.
-                    </p>
-                  </div>
-
-                  <Button className="w-full" variant="outline" asChild>
-                    <Link href="/seller">Back to dashboard</Link>
-                  </Button>
-
-                  <div className="text-xs text-zinc-500">
-                    Plan price (preview): {formatCurrency(Number(limits.priceGhs))} GHS/month
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="mt-8 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-800">
+            <p className="font-semibold">Current plan: {plan}</p>
+            <p className="mt-1 text-emerald-700">
+              Free is always available. Paid plans unlock more products, AI access, and seller tools.
+            </p>
           </div>
+
+          <div className="mt-8 grid gap-6 xl:grid-cols-4">
+            {plansLoading
+              ? Array.from({ length: 4 }).map((_, index) => (
+                  <Card key={index} className="h-full">
+                    <CardHeader>
+                      <div className="h-4 w-24 animate-pulse rounded bg-zinc-100" />
+                      <div className="mt-2 h-3 w-32 animate-pulse rounded bg-zinc-100" />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="h-8 w-20 animate-pulse rounded bg-zinc-100" />
+                      <div className="h-3 w-full animate-pulse rounded bg-zinc-100" />
+                      <div className="h-3 w-full animate-pulse rounded bg-zinc-100" />
+                    </CardContent>
+                  </Card>
+                ))
+              : plans.map((planItem) => {
+                  const isCurrent = plan === planItem.tier;
+                  const isDisabled = isCurrent || !planItem.isActive || checkout.isPending;
+                  const isFree = planItem.tier === "FREE";
+
+                  return (
+                    <Card
+                      key={planItem.tier}
+                      className={isCurrent ? "border-emerald-500 shadow-lg ring-1 ring-emerald-200" : "h-full"}
+                    >
+                      <CardHeader>
+                        <div className="flex items-center justify-between gap-2">
+                          <CardTitle className="text-base">{planItem.name}</CardTitle>
+                          <Badge variant={isCurrent ? "secondary" : "outline"}>{planItem.badge}</Badge>
+                        </div>
+                        <CardDescription>{planItem.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <p className="text-3xl font-semibold text-zinc-900">
+                            {planItem.priceGhs === 0 ? "Free" : formatCurrency(planItem.priceGhs)}
+                          </p>
+                          <p className="mt-1 text-sm text-zinc-500">
+                            {planItem.priceGhs === 0 ? "Included for every seller" : "Per month"}
+                          </p>
+                        </div>
+
+                        <ul className="space-y-2 text-sm text-zinc-600">
+                          <li>• Max products: {planItem.maxProducts === null || Number.isFinite(planItem.maxProducts) ? String(planItem.maxProducts) : "Unlimited"}</li>
+                          <li>• AI tier: {planItem.aiTier}</li>
+                          <li>• Analytics: {planItem.analytics ? "Included" : "Not included"}</li>
+                          <li>• Promotions: {planItem.promotions ? "Included" : "Not included"}</li>
+                          <li>• Multi-store: {planItem.multiStore ? "Included" : "Not included"}</li>
+                        </ul>
+
+                        <Button
+                          className="w-full"
+                          variant={isCurrent ? "secondary" : "default"}
+                          onClick={() => checkout.mutate({ plan: planItem.tier as never })}
+                          disabled={isDisabled}
+                        >
+                          {checkout.isPending
+                            ? "Processing…"
+                            : isCurrent
+                              ? "Current plan"
+                              : isFree
+                                ? "Default plan"
+                                : "Subscribe"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+          </div>
+
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle className="text-base">What changes with a paid plan?</CardTitle>
+              <CardDescription>
+                Admin-managed pricing and benefits are reflected here instantly for sellers.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
+                <p className="font-semibold text-zinc-900">Higher limits</p>
+                <p className="mt-1">Sell more products and unlock broader seller tools.</p>
+              </div>
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
+                <p className="font-semibold text-zinc-900">Advanced AI</p>
+                <p className="mt-1">Access stronger automation and assistant capabilities.</p>
+              </div>
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600">
+                <p className="font-semibold text-zinc-900">Premium visibility</p>
+                <p className="mt-1">Unlock promotions and better seller-facing features.</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </SellerPageShell>
     </PageShell>
