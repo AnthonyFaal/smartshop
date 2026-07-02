@@ -118,7 +118,7 @@ export async function createProduct(
   sellerId: string,
   input: {
     storeId: string;
-    categoryId: string;
+    categoryId?: string;
     title: string;
     description: string;
     price: number;
@@ -138,6 +138,17 @@ export async function createProduct(
     where: { userId: sellerId },
   });
   const limits = getPlanLimits(subscription?.plan ?? "FREE");
+
+  const resolvedCategoryId = input.categoryId
+    ? input.categoryId
+    : (await prisma.category.findFirst({
+        orderBy: { sortOrder: "asc" },
+        select: { id: true },
+      }))?.id;
+
+  if (!resolvedCategoryId) {
+    throw Errors.badRequest("No product category is available yet.");
+  }
 
   const productCount = await prisma.product.count({
     where: { sellerId, deletedAt: null },
@@ -166,7 +177,7 @@ export async function createProduct(
       data: {
         sellerId,
         storeId: input.storeId,
-        categoryId: input.categoryId,
+        categoryId: resolvedCategoryId,
         title: input.title,
         slug,
         description: input.description,

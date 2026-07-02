@@ -37,7 +37,7 @@ export const productRouter = createTRPCRouter({
     .input(
       z.object({
         storeId: z.string().uuid(),
-        categoryId: z.string().uuid(),
+        categoryId: z.string().uuid().optional(),
         title: z.string().min(3).max(300),
         description: z.string().min(10),
         price: z.number().positive(),
@@ -48,9 +48,13 @@ export const productRouter = createTRPCRouter({
         sku: z.string().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) =>
-      productService.createProduct(ctx.user.id, input)
-    ),
+    .mutation(async ({ input, ctx }) => {
+      const { categoryId, ...rest } = input;
+      return productService.createProduct(ctx.user.id, {
+        ...rest,
+        ...(categoryId ? { categoryId } : {}),
+      });
+    }),
 
   update: sellerProcedure
     .use(withErrorHandling)

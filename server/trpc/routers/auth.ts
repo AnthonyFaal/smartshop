@@ -9,6 +9,7 @@ import * as authService from "@/server/services/auth.service";
 import { prisma } from "@/lib/db/prisma";
 import { createNotification } from "@/lib/notifications/service";
 import { getPaymentProvider } from "@/lib/payments/provider";
+import { getSellerDashboardData } from "@/server/services/seller.service";
 import {
   getDefaultSubscriptionOfferings,
   getPlanLimits,
@@ -211,6 +212,10 @@ export const authRouter = createTRPCRouter({
 
   return user;
 }),
+
+  sellerDashboard: protectedProcedure
+    .use(withErrorHandling)
+    .query(async ({ ctx }) => getSellerDashboardData(ctx.user.id)),
 
   subscriptionPlans: protectedProcedure
     .use(withErrorHandling)
