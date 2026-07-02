@@ -6,6 +6,7 @@ import {
   withErrorHandling,
 } from "@/server/trpc/init";
 import * as productService from "@/server/services/product.service";
+import { prisma } from "@/lib/db/prisma";
 
 export const productRouter = createTRPCRouter({
   list: publicProcedure
@@ -27,10 +28,36 @@ export const productRouter = createTRPCRouter({
     )
     .query(async ({ input }) => productService.listProducts(input)),
 
+  sellerList: sellerProcedure
+    .use(withErrorHandling)
+    .input(
+      z
+        .object({
+          storeId: z.string().uuid().optional(),
+          status: z
+            .enum(["DRAFT", "ACTIVE", "OUT_OF_STOCK", "SUSPENDED", "ARCHIVED"])
+            .optional(),
+          search: z.string().trim().optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input, ctx }) =>
+      productService.listSellerProducts(ctx.user.id, input ?? {})
+    ),
+
   get: publicProcedure
     .use(withErrorHandling)
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => productService.getProduct(input.id)),
+
+  categories: publicProcedure
+    .use(withErrorHandling)
+    .query(async () =>
+      prisma.category.findMany({
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true, slug: true },
+      })
+    ),
 
   create: sellerProcedure
     .use(withErrorHandling)
@@ -49,11 +76,7 @@ export const productRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { categoryId, ...rest } = input;
-      return productService.createProduct(ctx.user.id, {
-        ...rest,
-        ...(categoryId ? { categoryId } : {}),
-      });
+      return productService.createProduct(ctx.user.id, input);
     }),
 
   update: sellerProcedure

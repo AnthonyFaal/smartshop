@@ -160,6 +160,10 @@ export function formatMaxProductsDisplay(value: number | null | undefined) {
   return String(value);
 }
 
+export function canUseAiFeatures(plan: SubscriptionPlan) {
+  return plan !== SubscriptionPlan.FREE;
+}
+
 export function normalizeSubscriptionOffering(offering: {
   tier: SubscriptionPlan;
   name?: string | null;

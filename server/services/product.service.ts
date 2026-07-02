@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { redis, cacheKeys, cacheGet, cacheSet, cacheDelete } from "@/lib/redis/client";
+import { cacheKeys, cacheGet, cacheSet, cacheDelete } from "@/lib/redis/client";
 import { slugify } from "@/lib/utils/format";
 import { Errors } from "@/server/errors";
 import { getPlanLimits } from "@/lib/config/subscriptions";
@@ -62,6 +62,62 @@ export async function listProducts(input: ProductListInput) {
   }
 
   return { products, nextCursor };
+}
+
+export async function listSellerProducts(
+  sellerId: string,
+  input: {
+    storeId?: string;
+    status?: ProductStatus;
+    search?: string;
+  } = {}
+) {
+  return prisma.product.findMany({
+    where: {
+      sellerId,
+      deletedAt: null,
+      ...(input.storeId && { storeId: input.storeId }),
+      ...(input.status && { status: input.status }),
+      ...(input.search && {
+        OR: [
+          { title: { contains: input.search, mode: "insensitive" } },
+          { sku: { contains: input.search, mode: "insensitive" } },
+          { store: { name: { contains: input.search, mode: "insensitive" } } },
+        ],
+      }),
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      slug: true,
+      price: true,
+      comparePrice: true,
+      stock: true,
+      status: true,
+      images: true,
+      sku: true,
+      viewCount: true,
+      soldCount: true,
+      rating: true,
+      reviewCount: true,
+      createdAt: true,
+      store: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
+    },
+  });
 }
 
 export async function getProduct(id: string) {

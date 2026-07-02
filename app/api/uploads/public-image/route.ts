@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { uploadPublicImage } from "@/lib/storage/s3";
+import { uploadPublicImage, getBucketForFileType } from "@/lib/storage/s3";
 import { env } from "@/lib/config/env";
 
 export const runtime = "nodejs";
 
 const uploadSchema = z.object({
   pathPrefix: z.string().min(1).max(200),
+  bucketType: z.enum(["product", "avatar", "document"]).optional(),
 });
 
 export async function POST(req: Request) {
@@ -14,14 +15,16 @@ export async function POST(req: Request) {
 
   const file = formData.get("file");
   const pathPrefixRaw = formData.get("pathPrefix");
+  const bucketTypeRaw = formData.get("bucketType");
 
   const parsed = uploadSchema.safeParse({
     pathPrefix: typeof pathPrefixRaw === "string" ? pathPrefixRaw : "",
+    bucketType: typeof bucketTypeRaw === "string" ? bucketTypeRaw : undefined,
   });
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid pathPrefix" },
+      { error: "Invalid upload parameters" },
       { status: 400 }
     );
   }
@@ -34,8 +37,12 @@ export async function POST(req: Request) {
   }
 
   try {
+    const bucket = parsed.data.bucketType
+      ? getBucketForFileType(parsed.data.bucketType)
+      : env.S3_BUCKET_UPLOADS;
+
     const { publicUrl } = await uploadPublicImage({
-      bucket: env.S3_BUCKET_UPLOADS,
+      bucket,
       pathPrefix: parsed.data.pathPrefix,
       file,
     });

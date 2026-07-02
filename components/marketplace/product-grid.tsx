@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -5,10 +6,11 @@ import { trpc } from "@/lib/trpc/client";
 import { ProductCard } from "@/components/marketplace/product-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-
 interface ProductGridProps {
   search?: string;
   categoryId?: string;
+  minPrice?: number;
+  maxPrice?: number;
 }
 
 type ProductItem = {
@@ -26,13 +28,20 @@ type ProductItem = {
   };
 };
 
-export function ProductGrid({ search, categoryId }: ProductGridProps) {
+export function ProductGrid({
+  search,
+  categoryId,
+  minPrice,
+  maxPrice,
+}: ProductGridProps) {
   const [cursor, setCursor] = useState<string | undefined>();
   const [allProducts, setAllProducts] = useState<ProductItem[]>([]);
 
   const { data, isLoading, isFetching } = trpc.product.list.useQuery({
     search,
     categoryId,
+    minPrice,
+    maxPrice,
     limit: 20,
     cursor,
   });
@@ -49,7 +58,7 @@ export function ProductGrid({ search, categoryId }: ProductGridProps) {
   useEffect(() => {
     setCursor(undefined);
     setAllProducts([]);
-  }, [search, categoryId]);
+  }, [search, categoryId, minPrice, maxPrice]);
 
   if (isLoading && allProducts.length === 0) {
     return (

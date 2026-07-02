@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SubscriptionPlan } from "@prisma/client";
 
 import {
+  canUseAiFeatures,
   formatMaxProductsDisplay,
   getDefaultSubscriptionOfferings,
   getPlanMeta,
@@ -65,5 +66,12 @@ describe("subscription plan metadata", () => {
     expect(formatMaxProductsDisplay(10000000)).toBe("Infinity");
     expect(formatMaxProductsDisplay(250)).toBe("250");
     expect(formatMaxProductsDisplay(null)).toBe("Infinity");
+  });
+
+  it("only exposes AI features to paid seller tiers", () => {
+    expect(canUseAiFeatures(SubscriptionPlan.FREE)).toBe(false);
+    expect(canUseAiFeatures(SubscriptionPlan.STARTER)).toBe(true);
+    expect(canUseAiFeatures(SubscriptionPlan.BUSINESS)).toBe(true);
+    expect(canUseAiFeatures(SubscriptionPlan.ENTERPRISE)).toBe(true);
   });
 });

@@ -282,3 +282,82 @@ export async function listOrders(
 
   return { orders, nextCursor };
 }
+
+export async function listSellerCustomers(sellerId: string) {
+  const orders = await prisma.order.findMany({
+    where: { sellerId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      buyerId: true,
+      total: true,
+      status: true,
+      createdAt: true,
+      buyer: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          profile: {
+            select: {
+              displayName: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const customers = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      email: string;
+      phone: string | null;
+      orderCount: number;
+      totalSpent: number;
+      lastOrderAt: Date;
+      activeOrders: number;
+    }
+  >();
+
+  for (const order of orders) {
+    const profile = order.buyer.profile;
+    const name =
+      profile?.displayName ||
+      [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") ||
+      order.buyer.email;
+    const existing = customers.get(order.buyerId);
+    const total = Number(order.total);
+    const isActive = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED"].includes(
+      order.status
+    );
+
+    if (existing) {
+      existing.orderCount += 1;
+      existing.totalSpent += total;
+      existing.activeOrders += isActive ? 1 : 0;
+      if (order.createdAt > existing.lastOrderAt) {
+        existing.lastOrderAt = order.createdAt;
+      }
+    } else {
+      customers.set(order.buyerId, {
+        id: order.buyer.id,
+        name,
+        email: order.buyer.email,
+        phone: order.buyer.phone,
+        orderCount: 1,
+        totalSpent: total,
+        lastOrderAt: order.createdAt,
+        activeOrders: isActive ? 1 : 0,
+      });
+    }
+  }
+
+  return Array.from(customers.values()).sort(
+    (a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime()
+  );
+}

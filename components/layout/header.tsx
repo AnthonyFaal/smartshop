@@ -1,5 +1,5 @@
 "use client";
-
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ShoppingCart, Heart, MessageCircle, User, Store } from "lucide-react";
@@ -36,12 +36,22 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600">
-            <Store className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-xl font-bold text-zinc-900">SmartShop</span>
-        </Link>
+      <Link href="/" className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg  overflow-hidden">
+          <Image
+            src="/icon.png" // place file in /public/logo.png
+            alt="SmartShop logo"
+            width={25}
+            height={25}
+            className="object-contain"
+            priority
+          />
+        </div>
+
+        <span className="text-xl font-bold text-zinc-900">
+          SmartShop
+        </span>
+      </Link>
 
         <nav className="hidden items-center gap-6 md:flex" aria-label="Main navigation">
           <Link href="/marketplace" className="text-sm font-medium text-zinc-600 hover:text-emerald-600">

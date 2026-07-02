@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import { ShieldCheck, Star, ShoppingCart } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ShieldCheck, Star, ShoppingCart, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -17,10 +18,13 @@ export default function ProductDetailPage() {
   const { data: product, isLoading } = trpc.product.get.useQuery({
     id: params.id,
   });
+
   const addToCart = trpc.cart.add.useMutation({
     onSuccess: () => toast.success("Added to cart"),
     onError: (e) => toast.error(e.message),
   });
+
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   if (isLoading) {
     return (
@@ -52,25 +56,98 @@ export default function ProductDetailPage() {
   }
 
   const price = Number(product.price);
-  const comparePrice = product.comparePrice
-    ? Number(product.comparePrice)
-    : null;
+  const comparePrice = product.comparePrice ? Number(product.comparePrice) : null;
+
+  const images = (product.images ?? []) as string[];
+
+  const selectedImage = (() => {
+    if (!images.length) return undefined;
+    const idx = Math.min(Math.max(selectedImageIndex, 0), images.length - 1);
+    return images[idx];
+  })();
 
   return (
     <div className="flex min-h-full flex-col">
       <Header />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
         <div className="grid gap-8 lg:grid-cols-2">
-          <div className="relative aspect-square overflow-hidden rounded-xl bg-zinc-100">
-            {product.images[0] && (
-              <Image
-                src={product.images[0]}
-                alt={product.title}
-                fill
-                className="object-cover"
-                priority
-                sizes="(max-width: 1024px) 100vw, 50vw"
-              />
+          <div className="space-y-3">
+            <div className="relative aspect-square overflow-hidden rounded-xl bg-zinc-100">
+              {selectedImage ? (
+                <Image
+                  src={selectedImage}
+                  alt={product.title}
+                  fill
+                  className="object-cover"
+                  priority
+                  unoptimized
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                />
+              ) : null}
+            </div>
+
+            {images.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={selectedImageIndex <= 0}
+                  onClick={() =>
+                    setSelectedImageIndex((i) => Math.max(i - 1, 0))
+                  }
+                  aria-label="Previous image"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="flex flex-1 gap-2 overflow-auto">
+                  {images.map((img, idx) => (
+                    <button
+                      key={img + idx}
+                      type="button"
+                      onClick={() => setSelectedImageIndex(idx)}
+                      className={[
+                        "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-white",
+                        idx === selectedImageIndex
+                          ? "border-emerald-500 ring-1 ring-emerald-500"
+                          : "border-zinc-200",
+                      ].join(" ")}
+                      aria-label={`Select image ${idx + 1}`}
+                    >
+                      <Image
+                        src={img}
+                        alt={`${product.title} image ${idx + 1}`}
+                        fill
+                        className="object-cover"
+                        sizes="64px"
+                        unoptimized
+                      />
+                    </button>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={selectedImageIndex >= images.length - 1}
+                  onClick={() =>
+                    setSelectedImageIndex((i) =>
+                      Math.min(i + 1, images.length - 1)
+                    )
+                  }
+                  aria-label="Next image"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+
+            {images.length === 0 && (
+              <div className="flex h-64 items-center justify-center text-sm text-zinc-500">
+                No images available
+              </div>
             )}
           </div>
 
@@ -115,9 +192,7 @@ export default function ProductDetailPage() {
 
             <div className="flex items-center gap-4">
               <span className="text-sm text-zinc-500">
-                {product.stock > 0
-                  ? `${product.stock} in stock`
-                  : "Out of stock"}
+                {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
               </span>
             </div>
 

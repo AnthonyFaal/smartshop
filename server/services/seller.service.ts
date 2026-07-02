@@ -7,7 +7,7 @@ import {
 import { SubscriptionPlan } from "@prisma/client";
 
 export async function getSellerDashboardData(userId: string) {
-  const [user, store, products, orders] = await Promise.all([
+  const [user, store, productCount, products, orders] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -39,6 +39,9 @@ export async function getSellerDashboardData(userId: string) {
         isVerified: true,
         productCount: true,
       },
+    }),
+    prisma.product.count({
+      where: { sellerId: userId, deletedAt: null },
     }),
     prisma.product.findMany({
       where: { sellerId: userId, deletedAt: null },
@@ -97,7 +100,6 @@ export async function getSellerDashboardData(userId: string) {
   const totalSold = products.reduce((sum, product) => sum + product.soldCount, 0);
   const conversionRate = totalViews > 0 ? (totalSold / totalViews) * 100 : 0;
 
-  const productCount = products.length;
   const limit = planLimits.maxProducts;
   const canCreateProduct = limit === null || productCount < limit;
 

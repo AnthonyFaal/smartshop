@@ -9,7 +9,8 @@ import { complete, getSystemPrompt } from "@/lib/ai/provider";
 import { prisma } from "@/lib/db/prisma";
 import { redis, cacheKeys } from "@/lib/redis/client";
 import { Errors } from "@/server/errors";
-import { AI_TIER_LIMITS } from "@/lib/config/subscriptions";
+import { AI_TIER_LIMITS, canUseAiFeatures } from "@/lib/config/subscriptions";
+import { SubscriptionPlan } from "@prisma/client";
 import type { AiFeature } from "@prisma/client";
 
 async function checkAiQuota(userId: string): Promise<void> {
@@ -17,13 +18,19 @@ async function checkAiQuota(userId: string): Promise<void> {
     where: { userId },
   });
 
-  const plan = subscription?.plan ?? "FREE";
+  const plan = subscription?.plan ?? SubscriptionPlan.FREE;
+  if (!canUseAiFeatures(plan)) {
+    throw Errors.subscriptionLimit(
+      "AI tools are available only for paid seller plans."
+    );
+  }
+
   const tier =
-    plan === "FREE"
-      ? "basic"
-      : plan === "STARTER"
+    plan === SubscriptionPlan.STARTER
       ? "standard"
-      : "advanced";
+      : plan === SubscriptionPlan.BUSINESS || plan === SubscriptionPlan.ENTERPRISE
+      ? "advanced"
+      : "basic";
 
   const limits = AI_TIER_LIMITS[tier];
 

@@ -84,6 +84,10 @@ export const orderRouter = createTRPCRouter({
       orderService.listOrders(ctx.user.id, "seller", input)
     ),
 
+  listSellerCustomers: sellerProcedure
+    .use(withErrorHandling)
+    .query(async ({ ctx }) => orderService.listSellerCustomers(ctx.user.id)),
+
   updateStatus: sellerProcedure
     .use(withErrorHandling)
     .input(
