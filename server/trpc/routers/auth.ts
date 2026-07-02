@@ -10,11 +10,77 @@ import { prisma } from "@/lib/db/prisma";
 import { createNotification } from "@/lib/notifications/service";
 import { getPaymentProvider } from "@/lib/payments/provider";
 import {
+  getDefaultSubscriptionOfferings,
   getPlanLimits,
-  getPlanMeta,
   getPlanOrder,
+  normalizeSubscriptionOffering,
 } from "@/lib/config/subscriptions";
 import { OtpPurpose, PaymentMethod, Prisma, SubscriptionPlan } from "@prisma/client";
+
+async function syncSubscriptionOfferings() {
+  const defaults = getDefaultSubscriptionOfferings();
+  const existingOfferings = await prisma.subscriptionOffering.findMany({
+    orderBy: { createdAt: "asc" },
+  });
+
+  const existingByTier = new Map<string, typeof existingOfferings[number][]>();
+  for (const offering of existingOfferings) {
+    const tier = offering.tier;
+    const items = existingByTier.get(tier) ?? [];
+    items.push(offering);
+    existingByTier.set(tier, items);
+  }
+
+  for (const defaultOffering of defaults) {
+    const tier = defaultOffering.tier as SubscriptionPlan;
+    const matches = existingByTier.get(tier) ?? [];
+
+    if (matches.length > 1) {
+      const [primary, ...duplicates] = matches.sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+
+      await Promise.all(
+        duplicates.map((offering) =>
+          prisma.subscriptionOffering.delete({ where: { id: offering.id } })
+        )
+      );
+
+      existingByTier.set(tier, [primary]);
+    }
+
+    if (!existingByTier.get(tier)?.length) {
+      await prisma.subscriptionOffering.create({
+        data: {
+          tier,
+          name: defaultOffering.name,
+          version: defaultOffering.version,
+          priceGhs: defaultOffering.priceGhs,
+          maxProducts: defaultOffering.maxProducts,
+          aiTier: defaultOffering.aiTier,
+          analytics: defaultOffering.analytics,
+          promotions: defaultOffering.promotions,
+          multiStore: defaultOffering.multiStore,
+          teamManagement: defaultOffering.teamManagement,
+          apiAccess: defaultOffering.apiAccess,
+          freeTrialDays: defaultOffering.freeTrialDays,
+          aiDailyRequests: defaultOffering.aiDailyRequests,
+          aiMaxTokensPerRequest: defaultOffering.aiMaxTokensPerRequest,
+          isActive: defaultOffering.isActive,
+        },
+      });
+    }
+  }
+
+  const offerings = await prisma.subscriptionOffering.findMany({
+    where: { isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return offerings.filter(
+    (offering, index, all) => all.findIndex((item) => item.tier === offering.tier) === index
+  );
+}
 
 export const authRouter = createTRPCRouter({
   register: publicProcedure
@@ -149,54 +215,13 @@ export const authRouter = createTRPCRouter({
   subscriptionPlans: protectedProcedure
     .use(withErrorHandling)
     .query(async () => {
-      const offerings = await prisma.subscriptionOffering.findMany({
-        where: { isActive: true },
-        orderBy: { createdAt: "asc" },
-      });
+      const offerings = await syncSubscriptionOfferings();
 
-      const fallbackPlans = Object.values(SubscriptionPlan).map((plan) => ({
-        tier: plan,
-        name: getPlanMeta(plan).label,
-        priceGhs: getPlanLimits(plan).priceGhs,
-        maxProducts: getPlanLimits(plan).maxProducts,
-        aiTier: getPlanLimits(plan).aiTier,
-        analytics: getPlanLimits(plan).analytics,
-        promotions: getPlanLimits(plan).promotions,
-        multiStore: getPlanLimits(plan).multiStore,
-        teamManagement: getPlanLimits(plan).teamManagement,
-        apiAccess: getPlanLimits(plan).apiAccess,
-        freeTrialDays: 0,
-        aiDailyRequests: 0,
-        aiMaxTokensPerRequest: 0,
-        isActive: true,
-      }));
-
-      const normalized = (offerings.length ? offerings : fallbackPlans)
-        .map((offering) => {
-          const plan = offering.tier as SubscriptionPlan;
-          const limits = getPlanLimits(plan);
-          const meta = getPlanMeta(plan);
-          return {
-            tier: plan,
-            name: offering.name ?? meta.label,
-            description: meta.description,
-            badge: meta.badge,
-            accent: meta.accent,
-            isPaid: meta.isPaid,
-            priceGhs: Number(offering.priceGhs ?? limits.priceGhs ?? 0),
-            maxProducts: offering.maxProducts ?? limits.maxProducts,
-            aiTier: offering.aiTier ?? limits.aiTier,
-            analytics: offering.analytics ?? limits.analytics,
-            promotions: offering.promotions ?? limits.promotions,
-            multiStore: offering.multiStore ?? limits.multiStore,
-            teamManagement: offering.teamManagement ?? limits.teamManagement,
-            apiAccess: offering.apiAccess ?? limits.apiAccess,
-            freeTrialDays: offering.freeTrialDays ?? 0,
-            aiDailyRequests: offering.aiDailyRequests ?? 0,
-            aiMaxTokensPerRequest: offering.aiMaxTokensPerRequest ?? 0,
-            isActive: offering.isActive,
-          };
-        })
+      const normalized = offerings
+        .map((offering) => normalizeSubscriptionOffering({
+          ...offering,
+          tier: offering.tier as SubscriptionPlan,
+        }))
         .sort((a, b) => getPlanOrder(a.tier) - getPlanOrder(b.tier));
 
       return { plans: normalized };

@@ -143,7 +143,7 @@ export async function createProduct(
     where: { sellerId, deletedAt: null },
   });
 
-  if (productCount >= limits.maxProducts) {
+  if (limits.maxProducts !== null && productCount >= limits.maxProducts) {
     throw Errors.subscriptionLimit(
       `Your plan allows a maximum of ${limits.maxProducts} products. Upgrade to add more.`
     );

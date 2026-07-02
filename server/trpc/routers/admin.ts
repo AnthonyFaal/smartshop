@@ -11,7 +11,135 @@ import { createNotification } from "@/lib/notifications/service";
 import { getPlanLimits } from "@/lib/config/subscriptions";
 import { SubscriptionPlan, SubscriptionStatus, NotificationChannel, NotificationType } from "@prisma/client";
 
+async function syncSubscriptionOfferingsForAdmin() {
+  const defaults = (await import("@/lib/config/subscriptions")).getDefaultSubscriptionOfferings();
+  const existingOfferings = await prisma.subscriptionOffering.findMany({
+    orderBy: { createdAt: "asc" },
+  });
+
+  const existingByTier = new Map<string, typeof existingOfferings[number][]>();
+  for (const offering of existingOfferings) {
+    const items = existingByTier.get(offering.tier) ?? [];
+    items.push(offering);
+    existingByTier.set(offering.tier, items);
+  }
+
+  for (const defaultOffering of defaults) {
+    const tier = defaultOffering.tier as SubscriptionPlan;
+    const matches = existingByTier.get(tier) ?? [];
+
+    if (matches.length > 1) {
+      const [primary, ...duplicates] = matches.sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+
+      await Promise.all(
+        duplicates.map((offering) =>
+          prisma.subscriptionOffering.delete({ where: { id: offering.id } })
+        )
+      );
+
+      existingByTier.set(tier, [primary]);
+    }
+
+    if (!existingByTier.get(tier)?.length) {
+      await prisma.subscriptionOffering.create({
+        data: {
+          tier,
+          name: defaultOffering.name,
+          version: defaultOffering.version,
+          priceGhs: defaultOffering.priceGhs,
+          maxProducts: defaultOffering.maxProducts,
+          aiTier: defaultOffering.aiTier,
+          analytics: defaultOffering.analytics,
+          promotions: defaultOffering.promotions,
+          multiStore: defaultOffering.multiStore,
+          teamManagement: defaultOffering.teamManagement,
+          apiAccess: defaultOffering.apiAccess,
+          freeTrialDays: defaultOffering.freeTrialDays,
+          aiDailyRequests: defaultOffering.aiDailyRequests,
+          aiMaxTokensPerRequest: defaultOffering.aiMaxTokensPerRequest,
+          isActive: defaultOffering.isActive,
+        },
+      });
+    }
+  }
+
+  const offerings = await prisma.subscriptionOffering.findMany({
+    where: { isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return offerings.filter(
+    (offering, index, all) => all.findIndex((item) => item.tier === offering.tier) === index
+  );
+}
+
 export const adminRouter = createTRPCRouter({
+  subscriptionOfferings: adminProcedure
+    .use(withErrorHandling)
+    .query(async () => {
+      const offerings = await syncSubscriptionOfferingsForAdmin();
+
+      return {
+        offerings: offerings.map((offering) => ({
+          ...offering,
+          priceGhs: Number(offering.priceGhs),
+        })),
+      };
+    }),
+
+  upsertSubscriptionOffering: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        id: z.string().uuid().optional(),
+        tier: z.nativeEnum(SubscriptionPlan),
+        name: z.string().min(1),
+        version: z.string().min(1),
+        priceGhs: z.number().min(0),
+        maxProducts: z.number().nullable().optional(),
+        aiTier: z.string().min(1),
+        analytics: z.boolean(),
+        promotions: z.boolean(),
+        multiStore: z.boolean(),
+        teamManagement: z.boolean(),
+        apiAccess: z.boolean(),
+        freeTrialDays: z.number().int().min(0),
+        aiDailyRequests: z.number().int().min(0),
+        aiMaxTokensPerRequest: z.number().int().min(0),
+        isActive: z.boolean(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const payload = {
+        tier: input.tier,
+        name: input.name,
+        version: input.version,
+        priceGhs: input.priceGhs,
+        maxProducts: input.maxProducts ?? 0,
+        aiTier: input.aiTier,
+        analytics: input.analytics,
+        promotions: input.promotions,
+        multiStore: input.multiStore,
+        teamManagement: input.teamManagement,
+        apiAccess: input.apiAccess,
+        freeTrialDays: input.freeTrialDays,
+        aiDailyRequests: input.aiDailyRequests,
+        aiMaxTokensPerRequest: input.aiMaxTokensPerRequest,
+        isActive: input.isActive,
+      };
+
+      const offering = input.id
+        ? await prisma.subscriptionOffering.update({
+            where: { id: input.id },
+            data: payload,
+          })
+        : await prisma.subscriptionOffering.create({ data: payload });
+
+      return { offering };
+    }),
+
   mySubscription: adminProcedure
     .use(withErrorHandling)
     .input(z.object({

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc/client";
 import { formatCurrency } from "@/lib/utils/format";
+import { formatMaxProductsDisplay } from "@/lib/config/subscriptions";
 import Link from "next/link";
 
 const statCards = [
@@ -49,8 +50,25 @@ export default function AdminDashboardPage() {
   const { data: sellerQueue } = trpc.admin.sellerQueue.useQuery({
     limit: 5,
   });
+  const { data: offeringsData } = trpc.admin.subscriptionOfferings.useQuery();
 
   const sellerQueueItems = (sellerQueue?.items ?? []) as SellerQueueItem[];
+  const offerings = ((offeringsData?.offerings ?? []) as Array<{
+    tier: string;
+    name: string;
+    priceGhs: unknown;
+    maxProducts?: number | null;
+    isActive: boolean;
+    analytics: boolean;
+    promotions: boolean;
+    multiStore: boolean;
+    teamManagement: boolean;
+    apiAccess: boolean;
+  }>).map((offering) => ({
+    ...offering,
+    priceGhs: Number(offering.priceGhs ?? 0),
+    maxProducts: offering.maxProducts ?? null,
+  }));
 
   return (
     <div className="flex min-h-full flex-col">
@@ -103,6 +121,47 @@ export default function AdminDashboardPage() {
               </span>
             )}
           </CardHeader>
+        </Card>
+
+        <Card className="mt-8">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Subscription offerings</CardTitle>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/admin/subscriptions">Manage plans</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {!offerings.length ? (
+              <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-500">
+                No subscription offerings have been created yet.
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {offerings.map((offering) => (
+                  <div key={offering.tier} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-zinc-900">{offering.name}</p>
+                      <Badge variant={offering.isActive ? "secondary" : "outline"}>
+                        {offering.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-zinc-500">{offering.tier}</p>
+                    <p className="mt-3 text-2xl font-semibold text-emerald-600">GHS {Number(offering.priceGhs).toFixed(2)}</p>
+                    <p className="mt-2 text-sm text-zinc-600">
+                      Max products: {formatMaxProductsDisplay(offering.maxProducts ?? null)}
+                    </p>
+                    <ul className="mt-3 space-y-1 text-sm text-zinc-600">
+                      <li>• Analytics: {offering.analytics ? "Yes" : "No"}</li>
+                      <li>• Promotions: {offering.promotions ? "Yes" : "No"}</li>
+                      <li>• Multi-store: {offering.multiStore ? "Yes" : "No"}</li>
+                      <li>• Team management: {offering.teamManagement ? "Yes" : "No"}</li>
+                      <li>• API access: {offering.apiAccess ? "Yes" : "No"}</li>
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
         </Card>
 
         <div className="mt-8 grid gap-4 lg:grid-cols-2">
@@ -179,6 +238,9 @@ export default function AdminDashboardPage() {
                 </Button>
                 <Button asChild size="sm" variant="outline">
                   <Link href="/admin/verification/gps">GPS & Location</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/admin/subscriptions">Plans</Link>
                 </Button>
               </div>
             </CardContent>
