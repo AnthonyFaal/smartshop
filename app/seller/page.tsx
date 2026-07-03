@@ -1,17 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import { Package, TrendingUp, AlertCircle, Sparkles, ArrowRight } from "lucide-react";
+import { Package, TrendingUp, AlertCircle } from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import { trpc } from "@/lib/trpc/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { useAuthUser } from "@/components/providers/auth-provider";
 
 export default function SellerDashboardPage() {
-  const { data: user } = trpc.auth.me.useQuery();
-  const { data: dashboard, isLoading } = trpc.auth.sellerDashboard.useQuery();
+  const { user: contextUser } = useAuthUser();
+  const { data: queriedUser, isLoading: userLoading } = trpc.auth.me.useQuery();
+  const user = queriedUser ?? contextUser ?? null;
+  const canViewDashboard = user?.role === "SELLER" || user?.role === "ADMIN";
+  const { data: dashboard, isLoading } = trpc.auth.sellerDashboard.useQuery(
+    undefined,
+    {
+      enabled: canViewDashboard,
+    }
+  );
+
+  if (!user && userLoading) {
+    return (
+      <PageShell>
+        <div className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6">
+          <div className="h-8 w-56 animate-pulse rounded bg-zinc-100" />
+          <div className="mt-3 h-4 w-72 animate-pulse rounded bg-zinc-100" />
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <Card key={index}>
+                <CardContent className="p-6">
+                  <div className="h-5 w-32 animate-pulse rounded bg-zinc-100" />
+                  <div className="mt-4 h-7 w-24 animate-pulse rounded bg-zinc-100" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </PageShell>
+    );
+  }
 
   if (!user) {
     return (
@@ -26,7 +56,7 @@ export default function SellerDashboardPage() {
     );
   }
 
-  if (user.role !== "SELLER" && user.role !== "ADMIN") {
+  if (!canViewDashboard) {
     return (
       <PageShell showVerificationBanner>
         <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">

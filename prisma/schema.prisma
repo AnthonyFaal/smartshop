@@ -222,6 +222,7 @@ model Product {
   stock         Int            @default(0)
   status        ProductStatus  @default(DRAFT)
   images        String[]       @default([])
+  sizes         String[]       @default([])
   tags          String[]       @default([])
   weight        Decimal?       @db.Decimal(8, 3)
   viewCount     Int            @default(0) @map("view_count")
@@ -270,13 +271,14 @@ model CartItem {
   id        String   @id @default(uuid()) @db.Uuid
   cartId    String   @map("cart_id") @db.Uuid
   productId String   @map("product_id") @db.Uuid
+  selectedSize String @default("") @map("selected_size") @db.VarChar(40)
   quantity  Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
   product   Product  @relation(fields: [productId], references: [id])
 
-  @@unique([cartId, productId])
+  @@unique([cartId, productId, selectedSize])
   @@index([productId])
   @@map("cart_items")
 }
@@ -325,6 +327,7 @@ model OrderItem {
   title     String  @db.VarChar(300)
   price     Decimal @db.Decimal(12, 2)
   quantity  Int
+  selectedSize String? @map("selected_size") @db.VarChar(40)
   total     Decimal @db.Decimal(12, 2)
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product   Product @relation(fields: [productId], references: [id])

@@ -82,7 +82,7 @@ export const SUBSCRIPTION_LIMITS = {
   },
 
   [SubscriptionPlan.STARTER]: {
-    maxProducts: 200,
+    maxProducts: 50,
     aiTier: "standard" as const,
     analytics: true,
     promotions: false,
@@ -93,7 +93,7 @@ export const SUBSCRIPTION_LIMITS = {
   },
 
   [SubscriptionPlan.BUSINESS]: {
-    maxProducts: 10000000,
+    maxProducts: 150,
     aiTier: "advanced" as const,
     analytics: true,
     promotions: true,

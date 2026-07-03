@@ -90,6 +90,7 @@ export async function createOrderFromCart(
               title: item.product.title,
               price: item.product.price,
               quantity: item.quantity,
+              selectedSize: item.selectedSize || null,
               total: new Prisma.Decimal(item.product.price.toString()).mul(
                 item.quantity
               ),

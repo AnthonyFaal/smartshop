@@ -8,12 +8,6 @@ import { trpc } from "@/lib/trpc/client";
 import type { AuthUser } from "@/lib/auth/get-auth-user";
 import { AuthInitialProvider } from "@/components/providers/auth-provider";
 
-function getBaseUrl() {
-  if (typeof window !== "undefined") return "";
-  if (process.env.APP_URL) return process.env.APP_URL;
-  return `http://localhost:${process.env.PORT ?? 3000}`;
-}
-
 export function TRPCProvider({
   children,
   initialAuthUser,
@@ -37,7 +31,7 @@ export function TRPCProvider({
     trpc.createClient({
       links: [
         httpBatchLink({
-          url: `${getBaseUrl()}/api/trpc`,
+          url: "/api/trpc",
           transformer: superjson,
           fetch(url, options) {
             return fetch(url, {

@@ -17,10 +17,16 @@ export const cartRouter = createTRPCRouter({
       z.object({
         productId: z.string().uuid(),
         quantity: z.number().int().min(1).max(99).default(1),
+        selectedSize: z.string().trim().max(40).optional(),
       })
     )
     .mutation(async ({ input, ctx }) =>
-      cartService.addToCart(ctx.user.id, input.productId, input.quantity)
+      cartService.addToCart(
+        ctx.user.id,
+        input.productId,
+        input.quantity,
+        input.selectedSize ?? ""
+      )
     ),
 
   update: protectedProcedure
