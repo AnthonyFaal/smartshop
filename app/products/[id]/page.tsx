@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ShieldCheck, Star, ShoppingCart, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
@@ -15,12 +15,16 @@ import { formatCurrency } from "@/lib/utils/format";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
+  const utils = trpc.useUtils();
   const { data: product, isLoading } = trpc.product.get.useQuery({
     id: params.id,
   });
 
   const addToCart = trpc.cart.add.useMutation({
-    onSuccess: () => toast.success("Added to cart"),
+    onSuccess: async () => {
+      await utils.cart.get.invalidate();
+      toast.success("Added to cart");
+    },
     onError: (e) => toast.error(e.message),
   });
 
@@ -70,9 +74,9 @@ export default function ProductDetailPage() {
     <div className="flex min-h-full flex-col">
       <Header />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
-        <div className="grid gap-8 lg:grid-cols-2">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)] lg:gap-12">
           <div className="space-y-3">
-            <div className="relative aspect-square overflow-hidden rounded-xl bg-zinc-100">
+            <div className="relative aspect-square overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 shadow-sm">
               {selectedImage ? (
                 <Image
                   src={selectedImage}
@@ -107,8 +111,8 @@ export default function ProductDetailPage() {
                       key={img + idx}
                       type="button"
                       onClick={() => setSelectedImageIndex(idx)}
-                      className={[
-                        "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-white",
+                    className={[
+                        "relative h-16 w-16 shrink-0 overflow-hidden rounded-md border bg-white",
                         idx === selectedImageIndex
                           ? "border-emerald-500 ring-1 ring-emerald-500"
                           : "border-zinc-200",
@@ -151,8 +155,8 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          <div className="space-y-6">
-            <div>
+          <div className="space-y-6 lg:pt-2">
+            <div className="rounded-lg border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex items-center gap-2">
                 <Badge variant="secondary">{product.category.name}</Badge>
                 {product.store.isVerified && (
@@ -168,43 +172,43 @@ export default function ProductDetailPage() {
               <p className="mt-1 text-sm text-zinc-500">
                 Sold by {product.store.name}
               </p>
-            </div>
 
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold text-emerald-700">
-                {formatCurrency(price)}
-              </span>
-              {comparePrice && (
-                <span className="text-lg text-zinc-400 line-through">
-                  {formatCurrency(comparePrice)}
+              <div className="mt-6 flex flex-wrap items-baseline gap-3">
+                <span className="text-3xl font-bold text-emerald-700">
+                  {formatCurrency(price)}
                 </span>
-              )}
-            </div>
-
-            {Number(product.rating) > 0 && (
-              <div className="flex items-center gap-1 text-sm text-zinc-600">
-                <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                {Number(product.rating).toFixed(1)} ({product.reviewCount} reviews)
+                {comparePrice && (
+                  <span className="text-lg text-zinc-400 line-through">
+                    {formatCurrency(comparePrice)}
+                  </span>
+                )}
               </div>
-            )}
 
-            <p className="text-zinc-600 leading-relaxed">{product.description}</p>
+              {Number(product.rating) > 0 && (
+                <div className="mt-4 flex items-center gap-1 text-sm text-zinc-600">
+                  <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  {Number(product.rating).toFixed(1)} ({product.reviewCount} reviews)
+                </div>
+              )}
 
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-zinc-500">
-                {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
-              </span>
+              <p className="mt-6 leading-relaxed text-zinc-600">{product.description}</p>
+
+              <div className="mt-6 flex flex-col gap-3 border-t border-zinc-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <span className={product.stock > 0 ? "text-sm font-medium text-emerald-700" : "text-sm font-medium text-red-600"}>
+                  {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
+                </span>
+
+                <Button
+                  size="lg"
+                  className="w-full sm:w-auto"
+                  disabled={product.stock <= 0 || addToCart.isPending}
+                  onClick={() => addToCart.mutate({ productId: product.id })}
+                >
+                  <ShoppingCart className="h-5 w-5" />
+                  {addToCart.isPending ? "Adding..." : "Add to Cart"}
+                </Button>
+              </div>
             </div>
-
-            <Button
-              size="lg"
-              className="w-full sm:w-auto"
-              disabled={product.stock <= 0 || addToCart.isPending}
-              onClick={() => addToCart.mutate({ productId: product.id })}
-            >
-              <ShoppingCart className="mr-2 h-5 w-5" />
-              Add to Cart
-            </Button>
           </div>
         </div>
       </main>
