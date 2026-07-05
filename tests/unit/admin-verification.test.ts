@@ -8,7 +8,6 @@ describe("getSellerVerificationSummary", () => {
       phoneVerified: true,
       hasGhanaCard: true,
       hasSelfie: true,
-      hasLocation: true,
       status: "UNDER_REVIEW",
     });
 
@@ -23,7 +22,6 @@ describe("getSellerVerificationSummary", () => {
       phoneVerified: true,
       hasGhanaCard: false,
       hasSelfie: true,
-      hasLocation: false,
       status: "PENDING",
     });
 

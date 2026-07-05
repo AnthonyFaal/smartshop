@@ -8,7 +8,6 @@ import {
   Camera,
   Clock3,
   CreditCard,
-  MapPin,
   ShieldCheck,
   ShieldX,
   User,
@@ -39,16 +38,8 @@ type SellerQueueItemUser = {
 
 type SellerQueueItem = {
   id: string;
-  shop_city?: string | null;
-  shop_region?: string | null;
-  shop_address?: string | null;
-  latitude?: unknown;
-  longitude?: unknown;
   ghanaCardFrontUrl?: string | null;
-  ghanaCardBackUrl?: string | null;
-  ghanaCardNumber?: string | null;
   selfieUrl?: string | null;
-  isLocationVerified?: boolean | null;
   status?: string | null;
   user?: SellerQueueItemUser | null;
 };
@@ -124,7 +115,6 @@ export default function AdminVerificationCenterPage() {
                   phoneVerified: Boolean(item.user?.phoneVerified),
                   hasGhanaCard: Boolean(item.ghanaCardFrontUrl),
                   hasSelfie: Boolean(item.selfieUrl),
-                  hasLocation: Boolean(item.isLocationVerified),
                   status: item.status as any,
                 });
 
@@ -210,7 +200,7 @@ function VerificationRow({
           <div className="flex flex-col items-start sm:items-end gap-1">
             <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-bold">Metrics Progress</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-zinc-700">{summary.completedCount}/4 Checklist</span>
+              <span className="text-xs font-semibold text-zinc-700">{summary.completedCount}/3 Checklist</span>
               <div className="w-16 bg-zinc-200 h-1.5 rounded-full overflow-hidden hidden xs:block">
                 <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${summary.progress}%` }} />
               </div>
@@ -232,22 +222,7 @@ function VerificationRow({
           <div className="lg:col-span-2 space-y-4">
             
             {/* Split Data Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Store Logistics Box */}
-              <div className="rounded-xl border border-zinc-200/60 bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-                  <MapPin className="h-3.5 w-3.5 text-emerald-600" />
-                  Physical Shop Layout
-                </div>
-                <div className="space-y-2 text-xs text-zinc-600">
-                  <p><span className="font-medium text-zinc-900 block mb-0.5">Region Location</span> {item.shop_city ?? "—"}, {item.shop_region ?? "—"}</p>
-                  <p><span className="font-medium text-zinc-900 block mb-0.5">Physical Address</span> {item.shop_address || "—"}</p>
-                  <p className="font-mono text-[11px] bg-zinc-50 p-1.5 rounded text-zinc-500">
-                    Lat: {String(item.latitude ?? "—")}, Lng: {String(item.longitude ?? "—")}
-                  </p>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">  
               {/* Progress Detail */}
               <div className="rounded-xl border border-zinc-200/60 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
@@ -278,12 +253,10 @@ function VerificationRow({
               
               <div className="bg-zinc-50/50 p-3 rounded-lg mb-4 border border-zinc-100">
                 <div className="text-xs text-zinc-500">Ghana Card Register Reference</div>
-                <div className="text-sm font-semibold text-zinc-800 font-mono">{item.ghanaCardNumber || "Not Provided"}</div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <DocumentPreview title="ID Card Front" url={item.ghanaCardFrontUrl ?? null} alt="Ghana Card Face Side" />
-                <DocumentPreview title="ID Card Back" url={item.ghanaCardBackUrl ?? null} alt="Ghana Card Reverse Side" />
                 <DocumentPreview title="Live Selfie Check" url={item.selfieUrl ?? null} alt="User Verification Selfie" />
               </div>
             </div>

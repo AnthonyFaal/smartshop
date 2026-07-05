@@ -6,6 +6,14 @@ datasource db {
   provider = "postgresql"
 }
 
+enum SellerVerificationStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
 model User {
   id                       String                    @id @default(uuid()) @db.Uuid
   email                    String                    @unique @db.VarChar(255)
@@ -115,27 +123,25 @@ model OtpRecord {
 }
 
 model SellerVerification {
-  id                String                   @id @default(uuid()) @db.Uuid
-  userId            String                   @unique @map("user_id") @db.Uuid
-  status            SellerVerificationStatus @default(PENDING)
-  ghanaCardNumber   String                   @map("ghana_card_number") @db.VarChar(255)
-  ghanaCardFrontUrl String                   @map("ghana_card_front_url") @db.VarChar(500)
-  ghanaCardBackUrl  String?                  @map("ghana_card_back_url") @db.VarChar(500)
-  selfieUrl         String                   @map("selfie_url") @db.VarChar(500)
-  isFaceVerified     Boolean @default(false) @map("is_face_verified")
-  isLocationVerified Boolean @default(false) @map("is_location_verified")
-  shop_address      String
-  shop_city         String                   @db.VarChar(100)
-  shop_region       String                   @db.VarChar(100)
-  latitude          Decimal                  @map("latitude") @db.Decimal(10, 8)
-  longitude         Decimal                  @map("longitude") @db.Decimal(11, 8)
-  reviewedBy        String?                  @map("reviewed_by") @db.Uuid
-  reviewedAt        DateTime?                @map("reviewed_at")
-  rejectionReason   String?                  @map("rejection_reason")
-  notes             String?                  @map("notes")
-  createdAt         DateTime                 @default(now()) @map("created_at")
-  updatedAt         DateTime                 @updatedAt @map("updated_at")
-  user              User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  status SellerVerificationStatus @default(PENDING)
+
+  ghanaCardFrontUrl String @map("ghana_card_front_url") @db.VarChar(500)
+  selfieUrl         String @map("selfie_url") @db.VarChar(500)
+
+  isFaceVerified Boolean @default(false) @map("is_face_verified")
+
+  reviewedBy      String?   @map("reviewed_by") @db.Uuid
+  reviewedAt      DateTime? @map("reviewed_at")
+  rejectionReason String?   @map("rejection_reason")
+  notes           String?   @map("notes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([createdAt])
@@ -143,31 +149,49 @@ model SellerVerification {
 }
 
 model Store {
-  id            String        @id @default(uuid()) @db.Uuid
-  ownerId       String        @map("owner_id") @db.Uuid
-  name          String        @db.VarChar(200)
-  slug          String        @unique @db.VarChar(220)
-  description   String?
-  logoUrl       String?       @map("logo_url") @db.VarChar(500)
-  bannerUrl     String?       @map("banner_url") @db.VarChar(500)
-  isActive      Boolean       @default(true) @map("is_active")
-  isVerified    Boolean       @default(false) @map("is_verified")
-  rating        Decimal       @default(0) @db.Decimal(3, 2)
-  reviewCount   Int           @default(0) @map("review_count")
-  followerCount Int           @default(0) @map("follower_count")
-  productCount  Int           @default(0) @map("product_count")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  deletedAt     DateTime?     @map("deleted_at")
-  orders        Order[]       @relation("StoreOrders")
-  products      Product[]
-  reviews       Review[]
-  followers     StoreFollow[]
-  owner         User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  id      String @id @default(uuid()) @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+
+  name        String  @db.VarChar(200)
+  slug        String  @unique @db.VarChar(220)
+  description String?
+
+  logoUrl   String? @map("logo_url") @db.VarChar(500)
+  bannerUrl String? @map("banner_url") @db.VarChar(500)
+
+  address String?
+  city    String? @db.VarChar(100)
+  region  String? @db.VarChar(100)
+  country String  @default("Ghana") @db.VarChar(100)
+
+  latitude  Decimal? @db.Decimal(10, 8)
+  longitude Decimal? @db.Decimal(11, 8)
+
+  verificationStatus StoreVerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt         DateTime?               @map("verified_at")
+  verifiedBy         String?                 @map("verified_by") @db.Uuid
+
+  isActive Boolean @default(true) @map("is_active")
+
+  rating        Decimal @default(0) @db.Decimal(3, 2)
+  reviewCount   Int     @default(0) @map("review_count")
+  followerCount Int     @default(0) @map("follower_count")
+  productCount  Int     @default(0) @map("product_count")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  owner     User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  orders    Order[]       @relation("StoreOrders")
+  products  Product[]
+  reviews   Review[]
+  followers StoreFollow[]
 
   @@index([ownerId])
   @@index([slug])
-  @@index([isActive, isVerified])
+  @@index([verificationStatus])
+  @@index([isActive, verificationStatus])
   @@index([rating])
   @@index([deletedAt])
   @@map("stores")
@@ -208,37 +232,37 @@ model Category {
 }
 
 model Product {
-  id            String         @id @default(uuid()) @db.Uuid
-  sellerId      String         @map("seller_id") @db.Uuid
-  storeId       String         @map("store_id") @db.Uuid
-  categoryId    String         @map("category_id") @db.Uuid
-  title         String         @db.VarChar(300)
-  slug          String         @db.VarChar(320)
+  id            String           @id @default(uuid()) @db.Uuid
+  sellerId      String           @map("seller_id") @db.Uuid
+  storeId       String           @map("store_id") @db.Uuid
+  categoryId    String           @map("category_id") @db.Uuid
+  title         String           @db.VarChar(300)
+  slug          String           @db.VarChar(320)
   description   String
-  price         Decimal        @db.Decimal(12, 2)
-  comparePrice  Decimal?       @map("compare_price") @db.Decimal(12, 2)
-  currency      String         @default("GHS") @db.VarChar(3)
-  sku           String?        @db.VarChar(100)
-  stock         Int            @default(0)
-  status        ProductStatus  @default(DRAFT)
-  images        String[]       @default([])
-  sizes         String[]       @default([])
-  tags          String[]       @default([])
-  weight        Decimal?       @db.Decimal(8, 3)
-  viewCount     Int            @default(0) @map("view_count")
-  soldCount     Int            @default(0) @map("sold_count")
-  rating        Decimal        @default(0) @db.Decimal(3, 2)
-  reviewCount   Int            @default(0) @map("review_count")
-  isFeatured    Boolean        @default(false) @map("is_featured")
+  price         Decimal          @db.Decimal(12, 2)
+  comparePrice  Decimal?         @map("compare_price") @db.Decimal(12, 2)
+  currency      String           @default("GHS") @db.VarChar(3)
+  sku           String?          @db.VarChar(100)
+  stock         Int              @default(0)
+  status        ProductStatus    @default(DRAFT)
+  images        String[]         @default([])
+  tags          String[]         @default([])
+  weight        Decimal?         @db.Decimal(8, 3)
+  viewCount     Int              @default(0) @map("view_count")
+  soldCount     Int              @default(0) @map("sold_count")
+  rating        Decimal          @default(0) @db.Decimal(3, 2)
+  reviewCount   Int              @default(0) @map("review_count")
+  isFeatured    Boolean          @default(false) @map("is_featured")
   metadata      Json?
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  deletedAt     DateTime?      @map("deleted_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  deletedAt     DateTime?        @map("deleted_at")
   cartItems     CartItem[]
   orderItems    OrderItem[]
-  category      Category       @relation(fields: [categoryId], references: [id])
-  seller        User           @relation(fields: [sellerId], references: [id])
-  store         Store          @relation(fields: [storeId], references: [id])
+  variants      ProductVariant[]
+  category      Category         @relation(fields: [categoryId], references: [id])
+  seller        User             @relation(fields: [sellerId], references: [id])
+  store         Store            @relation(fields: [storeId], references: [id])
   reports       Report[]
   reviews       Review[]
   wishlistItems WishlistItem[]
@@ -256,6 +280,21 @@ model Product {
   @@map("products")
 }
 
+model ProductVariant {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  size      String   @db.VarChar(40)
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, size])
+  @@index([productId])
+  @@map("product_variants")
+}
+
 model Cart {
   id        String     @id @default(uuid()) @db.Uuid
   userId    String     @unique @map("user_id") @db.Uuid
@@ -268,15 +307,15 @@ model Cart {
 }
 
 model CartItem {
-  id        String   @id @default(uuid()) @db.Uuid
-  cartId    String   @map("cart_id") @db.Uuid
-  productId String   @map("product_id") @db.Uuid
-  selectedSize String @default("") @map("selected_size") @db.VarChar(40)
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
+  id           String   @id @default(uuid()) @db.Uuid
+  cartId       String   @map("cart_id") @db.Uuid
+  productId    String   @map("product_id") @db.Uuid
+  selectedSize String   @default("") @map("selected_size") @db.VarChar(40)
+  quantity     Int      @default(1)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  cart         Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id])
 
   @@unique([cartId, productId, selectedSize])
   @@index([productId])
@@ -321,16 +360,16 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(uuid()) @db.Uuid
-  orderId   String  @map("order_id") @db.Uuid
-  productId String  @map("product_id") @db.Uuid
-  title     String  @db.VarChar(300)
-  price     Decimal @db.Decimal(12, 2)
-  quantity  Int
+  id           String  @id @default(uuid()) @db.Uuid
+  orderId      String  @map("order_id") @db.Uuid
+  productId    String  @map("product_id") @db.Uuid
+  title        String  @db.VarChar(300)
+  price        Decimal @db.Decimal(12, 2)
+  quantity     Int
   selectedSize String? @map("selected_size") @db.VarChar(40)
-  total     Decimal @db.Decimal(12, 2)
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  total        Decimal @db.Decimal(12, 2)
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product @relation(fields: [productId], references: [id])
 
   @@index([orderId])
   @@index([productId])
@@ -705,10 +744,10 @@ enum VerificationLevel {
   TRUSTED_SELLER
 }
 
-enum SellerVerificationStatus {
+enum StoreVerificationStatus {
   PENDING
   UNDER_REVIEW
-  APPROVED
+  VERIFIED
   REJECTED
   SUSPENDED
 }

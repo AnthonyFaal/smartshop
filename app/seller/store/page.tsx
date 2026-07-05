@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, Plus, Store as StoreIcon } from "lucide-react";
+
+import { GHANA_REGIONS } from "@/lib/ghana/regions";
+
 
 import { PageShell } from "@/components/layout/page-shell";
 import { SellerPageShell } from "@/components/layout/seller-page-shell";
@@ -15,12 +18,40 @@ import { trpc } from "@/lib/trpc/client";
 type StoreForm = {
   name: string;
   description: string;
+
+  // Branding
+  logoUrl: string;
+  bannerUrl: string;
+
+  // Location (Ghana-only)
+  address: string;
+  region: string;
+  city: string;
+  town: string;
+  country: "Ghana";
+
+  latitude: number | null;
+  longitude: number | null;
 };
 
 const initialForm: StoreForm = {
   name: "",
   description: "",
+
+  logoUrl: "",
+  bannerUrl: "",
+
+  address: "",
+  region: "",
+  city: "",
+  town: "",
+  country: "Ghana",
+
+  latitude: null,
+  longitude: null,
 };
+
+
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -32,8 +63,32 @@ export default function SellerStorePage() {
   const { data: stores, isLoading: storesLoading } = trpc.store.list.useQuery();
 
   const [form, setForm] = useState<StoreForm>(initialForm);
+
+  // Note: Store model only has `city` and `region` fields.
+  // UX mapping:
+  // - “Developed municipality” (stored in DB `city`)
+  // - “Area/Town under it” (stored in DB `town`, appended into `city` as "Municipality, Area")
+
+
+
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+
+
+  const selectedRegion = useMemo(
+    () => GHANA_REGIONS.find((r) => r.name === form.region) ?? null,
+    [form.region]
+  );
+
+  const selectedCity = useMemo(() => {
+    if (!selectedRegion) return null;
+    return selectedRegion.cities.find((c) => c.name === form.city) ?? null;
+  }, [selectedRegion, form.city]);
+
+  const cityTowns = selectedCity?.towns ?? [];
+
+
 
   const createStore = trpc.store.create.useMutation({
     onSuccess: async () => {
@@ -43,7 +98,15 @@ export default function SellerStorePage() {
   });
 
   const storeList = stores ?? [];
-  const canSubmit = form.name.trim().length >= 2 && !createStore.isPending;
+  const locationReady =
+    form.address.trim().length > 0 &&
+    form.region.trim().length > 0 &&
+    form.city.trim().length > 0 &&
+    form.latitude != null &&
+    form.longitude != null;
+
+  const canSubmit = form.name.trim().length >= 2 && locationReady && !createStore.isPending;
+
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -56,10 +119,40 @@ export default function SellerStorePage() {
     }
 
     try {
+      const sanitizeOptionalString = (v: string) => v.trim() || undefined;
+
+      if (!form.address.trim()) {
+        setError("Address is required.");
+        return;
+      }
+      if (!form.region.trim()) {
+        setError("Region is required.");
+        return;
+      }
+      if (!form.city.trim()) {
+        setError("Developed municipality / area is required.");
+        return;
+      }
+      if (form.latitude == null || form.longitude == null) {
+        setError("Location coordinates could not be determined.");
+        return;
+      }
+
       const store = await createStore.mutateAsync({
         name: form.name.trim(),
-        description: form.description.trim() || undefined,
+        description: sanitizeOptionalString(form.description),
+        logoUrl: sanitizeOptionalString(form.logoUrl),
+        bannerUrl: sanitizeOptionalString(form.bannerUrl),
+        address: form.address.trim(),
+        city: `${form.city}${form.town ? `, ${form.town}` : ""}`.trim(),
+        region: form.region.trim(),
+        country: "Ghana",
+        latitude: form.latitude,
+        longitude: form.longitude,
       });
+
+
+
 
       setForm(initialForm);
       setSuccess(`${store.name} was created.`);
@@ -122,6 +215,243 @@ export default function SellerStorePage() {
                     />
                   </div>
 
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="store-logo">Logo (optional)</Label>
+                      <input
+                        id="store-logo"
+                        type="file"
+                        accept="image/*"
+                        className="block w-full text-sm text-zinc-700 file:mr-4 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-800 hover:file:bg-zinc-200"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const pathPrefix = `stores/${new Date().toISOString()}`;
+
+                          const fd = new FormData();
+                          fd.set("file", file);
+                          fd.set("pathPrefix", pathPrefix);
+                          fd.set("bucketType", "avatar");
+
+                          try {
+                            const res = await fetch("/api/uploads/public-image", {
+                              method: "POST",
+                              body: fd,
+                            });
+                            const json: { publicUrl?: string; error?: string } =
+                              await res.json();
+                            if (!res.ok || !json.publicUrl) {
+                              setError(json.error ?? "Logo upload failed.");
+                              return;
+                            }
+                            setForm((current) => ({
+                              ...current,
+                              logoUrl: json.publicUrl ?? "",
+                            }));
+                          } catch {
+                            setError("Logo upload failed.");
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="store-banner">Banner (optional)</Label>
+                      <input
+                        id="store-banner"
+                        type="file"
+                        accept="image/*"
+                        className="block w-full text-sm text-zinc-700 file:mr-4 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-zinc-800 hover:file:bg-zinc-200"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const pathPrefix = `stores/${new Date().toISOString()}`;
+
+                          const fd = new FormData();
+                          fd.set("file", file);
+                          fd.set("pathPrefix", pathPrefix);
+                          fd.set("bucketType", "product");
+
+                          try {
+                            const res = await fetch("/api/uploads/public-image", {
+                              method: "POST",
+                              body: fd,
+                            });
+                            const json: { publicUrl?: string; error?: string } =
+                              await res.json();
+                            if (!res.ok || !json.publicUrl) {
+                              setError(json.error ?? "Banner upload failed.");
+                              return;
+                            }
+                            setForm((current) => ({
+                              ...current,
+                              bannerUrl: json.publicUrl ?? "",
+                            }));
+                          } catch {
+                            setError("Banner upload failed.");
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="store-address">Address</Label>
+                      <Input
+                        id="store-address"
+                        value={form.address}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            address: event.target.value,
+                          }))
+                        }
+                        placeholder="Street / market area"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="store-region">Region</Label>
+                      <select
+                        id="store-region"
+                        className="flex h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
+                        value={form.region}
+                        onChange={(e) => {
+                          const regionName = e.target.value;
+                          const region = GHANA_REGIONS.find(
+                            (r) => r.name === regionName
+                          );
+
+                          const firstCity = region?.cities?.[0];
+                          const firstTown = firstCity?.towns?.[0];
+
+                          const nextCityName = firstCity?.name ?? "";
+                          const nextTownName = firstTown?.name ?? "";
+
+                          const coord = firstTown
+                            ? { latitude: firstTown.latitude, longitude: firstTown.longitude }
+                            : firstCity
+                              ? { latitude: firstCity.latitude, longitude: firstCity.longitude }
+                              : { latitude: null, longitude: null };
+
+                          setForm((current) => ({
+                            ...current,
+                            region: regionName,
+                            city: nextCityName,
+                            town: nextTownName,
+                            latitude: coord.latitude,
+                            longitude: coord.longitude,
+                          }));
+                        }}
+                      >
+                        <option value="" disabled>
+                          Select a region
+                        </option>
+                        {GHANA_REGIONS.map((region) => (
+                          <option key={region.name} value={region.name}>
+                            {region.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="store-city">Developed municipality</Label>
+                      <select
+                        id="store-city"
+                        className="flex h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        value={form.city}
+                        disabled={!form.region}
+                        onChange={(e) => {
+                          const cityName = e.target.value;
+                          const region = GHANA_REGIONS.find(
+                            (r) => r.name === form.region
+                          );
+                          const city = region?.cities?.find(
+                            (c) => c.name === cityName
+                          );
+                          const firstTown = city?.towns?.[0];
+
+                          const nextTownName = firstTown?.name ?? "";
+                          const coord = firstTown
+                            ? { latitude: firstTown.latitude, longitude: firstTown.longitude }
+                            : city
+                              ? { latitude: city.latitude, longitude: city.longitude }
+                              : { latitude: null, longitude: null };
+
+                          setForm((current) => ({
+                            ...current,
+                            city: cityName,
+                            town: nextTownName,
+                            latitude: coord.latitude,
+                            longitude: coord.longitude,
+                          }));
+                        }}
+                      >
+                        <option value="" disabled>
+                          Select a developed municipality
+                        </option>
+                        {(selectedRegion?.cities ?? []).map((city) => (
+                          <option key={city.name} value={city.name}>
+                            {city.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="store-town">Area (town under it)</Label>
+                      <select
+                        id="store-town"
+                        className="flex h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        value={form.town}
+                        disabled={!form.region || !form.city}
+                        onChange={(e) => {
+                          const townName = e.target.value;
+                          const region = GHANA_REGIONS.find(
+                            (r) => r.name === form.region
+                          );
+                          const city = region?.cities?.find(
+                            (c) => c.name === form.city
+                          );
+                          const town = city?.towns?.find(
+                            (t) => t.name === townName
+                          );
+
+                          setForm((current) => ({
+                            ...current,
+                            town: townName,
+                            latitude: town?.latitude ?? current.latitude,
+                            longitude: town?.longitude ?? current.longitude,
+                          }));
+                        }}
+                      >
+                        <option value="">
+                          {(() => {
+                            const region = GHANA_REGIONS.find(
+                              (r) => r.name === form.region
+                            );
+                            const city = region?.cities?.find(
+                              (c) => c.name === form.city
+                            );
+                          return city?.towns && city.towns.length > 0
+                            ? "Select an area"
+                            : "No areas available";
+                        })()}
+                        </option>
+
+                        {(cityTowns ?? []).map((town) => (
+                          <option key={town.name} value={town.name}>
+                            {town.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+
+
                   {error ? <p className="text-sm text-red-600">{error}</p> : null}
                   {success ? (
                     <p className="text-sm text-emerald-700">{success}</p>
@@ -170,7 +500,7 @@ export default function SellerStorePage() {
                               <h2 className="font-medium text-zinc-900">
                                 {store.name}
                               </h2>
-                              {store.isVerified ? (
+                              {store.verificationStatus? (
                                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                               ) : null}
                             </div>

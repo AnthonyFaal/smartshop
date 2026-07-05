@@ -181,27 +181,13 @@ export const authRouter = createTRPCRouter({
         select: {
           id: true,
           status: true,
-
-          ghanaCardNumber: true,
           ghanaCardFrontUrl: true,
-          ghanaCardBackUrl: true,
-
           selfieUrl: true,
-
-          shop_address: true,
-          shop_city: true,
-          shop_region: true,
-          isLocationVerified: true,
-
-          latitude: true,
-          longitude: true,
-
+          isFaceVerified: true,
           reviewedBy: true,
           reviewedAt: true,
-
           rejectionReason: true,
           notes: true,
-
           createdAt: true,
           updatedAt: true,
         },
@@ -328,223 +314,61 @@ export const authRouter = createTRPCRouter({
   // to align with the new Prisma schema and remove manual URL/GPS inputs.
 
 sellerVerificationUpsertGhanaCardImage: protectedProcedure
-.use(withErrorHandling)
-.input(
-  z.object({
-    ghanaCardFrontUrl: z.string().url().max(2048),
+  .use(withErrorHandling)
+  .input(
+    z.object({
+      ghanaCardFrontUrl: z.string().url().max(2048),
+    })
+  )
+  .mutation(async ({ input, ctx }) => {
+    const userId = ctx.user.id;
 
-    ghanaCardBackUrl: z.string().url().max(2048).optional(),
-
-    ghanaCardNumber: z.string().min(1).max(255),
-  })
-)
-
-
-.mutation(async ({ input, ctx }) => {
-
-  const userId = ctx.user.id;
-
-
-  const existing =
-    await prisma.sellerVerification.findUnique({
-      where:{
-        userId
-      }
+    await prisma.sellerVerification.upsert({
+      where: { userId },
+      create: {
+        userId,
+        ghanaCardFrontUrl: input.ghanaCardFrontUrl,
+        selfieUrl: "",
+        isFaceVerified: false,
+        status: "PENDING",
+      },
+      update: {
+        ghanaCardFrontUrl: input.ghanaCardFrontUrl,
+        status: "PENDING",
+      },
     });
 
-
-  if(existing?.ghanaCardNumber === input.ghanaCardNumber){
-    return {
-      success:true
-    };
-  }
-
-
-  await prisma.sellerVerification.upsert({
-
-    where:{
-      userId
-    },
-
-
-    create:{
-
-      userId,
-
-      ghanaCardNumber:
-        input.ghanaCardNumber,
-
-      ghanaCardFrontUrl:
-        input.ghanaCardFrontUrl,
-
-      ghanaCardBackUrl:
-        input.ghanaCardBackUrl ?? null,
-
-
-      selfieUrl:"",
-
-
-      shop_address:"",
-      shop_city:"",
-      shop_region:"",
-
-
-      latitude:0,
-      longitude:0,
-
-
-      status:"PENDING",
-    },
-
-
-    update:{
-
-      ghanaCardNumber:
-        input.ghanaCardNumber,
-
-      ghanaCardFrontUrl:
-        input.ghanaCardFrontUrl,
-
-
-      ghanaCardBackUrl:
-        input.ghanaCardBackUrl ?? null,
-
-
-      status:"PENDING",
-
-    }
-
-  });
-
-
-  return {
-    success:true
-  };
-
-}),
+    return { success: true };
+  }),
 
 sellerVerificationUpsertSelfieFrame: protectedProcedure
-.use(withErrorHandling)
-.input(
- z.object({
-   selfieUrl:z.string().url().max(2048)
- })
-)
+  .use(withErrorHandling)
+  .input(
+    z.object({
+      selfieUrl: z.string().url().max(2048),
+    })
+  )
+  .mutation(async ({ input, ctx }) => {
+    await prisma.sellerVerification.upsert({
+      where: { userId: ctx.user.id },
+      create: {
+        userId: ctx.user.id,
+        ghanaCardFrontUrl: "",
+        selfieUrl: input.selfieUrl,
+        isFaceVerified: false,
+        status: "PENDING",
+      },
+      update: {
+        selfieUrl: input.selfieUrl,
+        status: "PENDING",
+      },
+    });
 
+    return { success: true };
+  }),
 
-.mutation(async({input,ctx})=>{
-
-
- await prisma.sellerVerification.upsert({
-
-  where:{
-    userId:ctx.user.id
-  },
-
-
-  create:{
-
-    userId:ctx.user.id,
-
-    ghanaCardNumber:"PENDING",
-
-    ghanaCardFrontUrl:"",
-
-    ghanaCardBackUrl:null,
-
-
-    selfieUrl:
-      input.selfieUrl,
-
-
-    shop_address:"",
-    shop_city:"",
-    shop_region:"",
-
-
-    latitude:0,
-    longitude:0,
-
-
-    status:"PENDING",
-
-  },
-
-
-  update:{
-
-    selfieUrl:
-      input.selfieUrl,
-
-
-    status:"PENDING"
-
-  }
-
-
- });
-
-
- return {
-   success:true
- };
-
-
-}),
-
-sellerVerificationSubmitLocation: protectedProcedure
-.use(withErrorHandling)
-
-.input(
-  z.object({
-    latitude: z.number(),
-    longitude: z.number(),
-    shopRegion: z.string().min(1).max(100),
-    shopCity: z.string().min(1).max(100),
-    shopTown: z.string().min(1).max(100),
-    shopAddress: z.string().min(1).max(500),
-  })
-)
-
-.mutation(async ({ input, ctx }) => {
-  const userId = ctx.user.id;
-
-  const updated = await prisma.sellerVerification.update({
-    where: { userId },
-    data: {
-      latitude: new Prisma.Decimal(input.latitude),
-      longitude: new Prisma.Decimal(input.longitude),
-
-      // UI fields
-      shop_region: input.shopRegion,
-      shop_city: input.shopCity,
-      shop_address: input.shopAddress,
-
-      // The schema has no dedicated "town" field; keep town in notes for now.
-      notes: input.shopTown,
-
-      isLocationVerified: true,
-      status: "UNDER_REVIEW",
-    },
-    select: {
-      id: true,
-      status: true,
-      isLocationVerified: true,
-      latitude: true,
-      longitude: true,
-      shop_region: true,
-      shop_city: true,
-      shop_address: true,
-      notes: true,
-      updatedAt: true,
-    },
-  });
-
-  return {
-    success: true,
-    updated,
-  };
-}),
+// Seller verification must not collect or update store location.
+// The previous location-based endpoint is removed by design.
 
 
   sendOtp: protectedProcedure

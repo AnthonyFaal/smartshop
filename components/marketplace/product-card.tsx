@@ -20,6 +20,7 @@ interface ProductCardProps {
       name: string;
       slug: string;
       isVerified: boolean;
+      
     };
   };
 }

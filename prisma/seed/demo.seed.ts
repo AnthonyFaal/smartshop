@@ -31,14 +31,8 @@ export async function seedDemoSeller() {
       sellerVerification: {
         create: {
           status: "APPROVED",
-          ghanaCardNumber: "GHA-000000000-0",
           ghanaCardFrontUrl: "https://placeholder.smartshop.gh/card.jpg",
           selfieUrl: "https://placeholder.smartshop.gh/selfie.jpg",
-          shop_address: "UMaT Campus, Tarkwa",
-          shop_city: "Tarkwa",
-          shop_region: "Western Region",
-          latitude: 5.303,
-          longitude: -1.989,
           reviewedAt: new Date(),
         },
       },
@@ -58,17 +52,33 @@ export async function seedDemoSeller() {
     update: {},
     create: {
       ownerId: seller.id,
-      name: "Kwame's Shop",
-      slug: "kwames-shop",
-      description: "Demo store",
-      isVerified: true,
-      rating: 4.5,
-      reviewCount: 12,
+    name: "Kwame's Shop",
+    slug: "kwames-shop",
+    description: "Demo store in Tarkwa marketplace",
+
+    address: "Tarkwa Market Area",
+    city: "Tarkwa",
+    region: "Western Region",
+    country: "Ghana",
+    logoUrl: null,
+
+    latitude: 5.3016,
+    longitude: -1.9951,
+
+    verificationStatus: "PENDING",
+
+    isActive: true,
+
+    followerCount: 0,
+    productCount: 0,
+    reviewCount: 12,
+    rating: 4.5,
     },
   });
 
   return { seller, store };
 }
+
 
 /**
  * DEMO PRODUCTS

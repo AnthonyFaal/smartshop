@@ -36,7 +36,7 @@ export async function getSellerDashboardData(userId: string) {
       select: {
         id: true,
         name: true,
-        isVerified: true,
+        verificationStatus: true,
         productCount: true,
       },
     }),
@@ -114,7 +114,7 @@ export async function getSellerDashboardData(userId: string) {
       ? {
           id: store.id,
           name: store.name,
-          isVerified: store.isVerified,
+          isVerified: store.verificationStatus,
           productCount: store.productCount,
         }
       : null,

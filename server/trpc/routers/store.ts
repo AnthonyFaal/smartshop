@@ -41,7 +41,7 @@ export const storeRouter = createTRPCRouter({
           slug: true,
           description: true,
           isActive: true,
-          isVerified: true,
+          verificationStatus: true,
           productCount: true,
           followerCount: true,
           createdAt: true,
@@ -56,6 +56,30 @@ export const storeRouter = createTRPCRouter({
       z.object({
         name: z.string().trim().min(2).max(200),
         description: z.string().trim().max(1000).optional(),
+
+        // Branding (optional, but if provided must be valid URLs)
+        logoUrl: z
+          .string()
+          .trim()
+          .url()
+          .max(500)
+          .optional()
+          .nullable(),
+        bannerUrl: z
+          .string()
+          .trim()
+          .url()
+          .max(500)
+          .optional()
+          .nullable(),
+
+        // Store location (Ghana-only flow: address + region + city(+town) are required)
+        address: z.string().trim().min(3).max(255),
+        city: z.string().trim().min(2).max(100),
+        region: z.string().trim().min(2).max(100),
+        country: z.string().trim().max(100).optional().default("Ghana"),
+        latitude: z.number(),
+        longitude: z.number(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -78,6 +102,15 @@ export const storeRouter = createTRPCRouter({
         }
       }
 
+      // Ghana-only flow: location is always required (validated by zod).
+      // Keep additional checks minimal to avoid conflicting rules.
+
+      // Enforce explicit Ghana country for safety.
+      if ((input.country ?? "Ghana") !== "Ghana") {
+        throw Errors.badRequest("Only Ghana is supported for store location for now.");
+      }
+
+
       const slug = await createUniqueStoreSlug(input.name);
 
       return prisma.store.create({
@@ -86,7 +119,19 @@ export const storeRouter = createTRPCRouter({
           name: input.name,
           slug,
           description: input.description || null,
-          isVerified: true,
+          logoUrl: input.logoUrl ?? null,
+          bannerUrl: input.bannerUrl ?? null,
+
+          address: input.address ?? null,
+          city: input.city ?? null,
+          region: input.region ?? null,
+          country: input.country ?? "Ghana",
+
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
+
+          // Verification should follow the real verification flow.
+          // Keep schema default (PENDING) by not overriding it.
         },
         select: {
           id: true,
@@ -94,7 +139,7 @@ export const storeRouter = createTRPCRouter({
           slug: true,
           description: true,
           isActive: true,
-          isVerified: true,
+          verificationStatus: true,
           productCount: true,
           followerCount: true,
           createdAt: true,
@@ -104,3 +149,4 @@ export const storeRouter = createTRPCRouter({
 });
 
 export default storeRouter;
+

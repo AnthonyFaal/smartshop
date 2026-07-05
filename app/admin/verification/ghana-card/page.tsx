@@ -25,8 +25,6 @@ type SellerQueueItemUser = {
 type SellerQueueItem = {
   id: string;
   ghanaCardFrontUrl?: string | null;
-  ghanaCardBackUrl?: string | null;
-  ghanaCardNumber?: string | null;
   user?: SellerQueueItemUser | null;
 };
 
@@ -104,9 +102,7 @@ export default function AdminGhanaCardReviewPage() {
                     key={item.id}
                     verificationId={item.id}
                     userDisplay={item.user?.profile?.displayName ?? item.user?.email ?? "Seller applicant"}
-                    ghanaNumber={item.ghanaCardNumber ?? "—"}
                     frontUrl={item.ghanaCardFrontUrl ?? "—"}
-                    backUrl={item.ghanaCardBackUrl ?? null}
                     reason={reasonById[item.id] ?? ""}
                     setReason={(v) =>
                       setReasonById((prev) => ({ ...prev, [item.id]: v }))

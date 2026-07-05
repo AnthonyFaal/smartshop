@@ -115,40 +115,66 @@ export default function CartPage() {
                       </div>
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={updateMutation.isPending}
-                            onClick={() =>
-                              updateMutation.mutate({
-                                itemId: item.id,
-                                quantity: item.quantity - 1,
-                              })
-                            }
-                            aria-label="Decrease quantity"
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-8 text-center text-sm">
-                            {item.quantity}
-                          </span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={updateMutation.isPending || item.quantity >= item.product.stock}
-                            onClick={() =>
-                              updateMutation.mutate({
-                                itemId: item.id,
-                                quantity: item.quantity + 1,
-                              })
-                            }
-                            aria-label="Increase quantity"
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
+                          {(() => {
+                            const selectedSize = (item.selectedSize ?? "").trim();
+                            const variants = (item.product as any)
+                              ?.variants as
+                              | Array<{ size: string; quantity: number }>
+                              | undefined;
+
+                            const maxQty =
+                              Array.isArray(variants) &&
+                              variants.length > 0 &&
+                              selectedSize
+                                ? variants.find((v) => v.size === selectedSize)?.quantity ??
+                                  0
+                                : item.product.stock;
+
+                            const safeMaxQty = Math.max(0, maxQty ?? 0);
+
+                            return (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={updateMutation.isPending}
+                                  onClick={() =>
+                                    updateMutation.mutate({
+                                      itemId: item.id,
+                                      quantity: item.quantity - 1,
+                                    })
+                                  }
+                                  aria-label="Decrease quantity"
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="w-8 text-center text-sm">
+                                  {item.quantity}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={
+                                    updateMutation.isPending ||
+                                    item.quantity >= safeMaxQty
+                                  }
+                                  onClick={() =>
+                                    updateMutation.mutate({
+                                      itemId: item.id,
+                                      quantity: item.quantity + 1,
+                                    })
+                                  }
+                                  aria-label="Increase quantity"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </>
+                            );
+                          })()}
                         </div>
+
                         <div className="flex items-center justify-between gap-4 sm:justify-end">
                           <span className="font-semibold">
                             {formatCurrency(

@@ -7,6 +7,7 @@ import {
   Loader2,
   Plus,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 import { PageShell } from "@/components/layout/page-shell";
@@ -38,7 +39,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 /* -----------------------------
-   FORM TYPE
+   FORM TYPES & CONSTANTS
 ------------------------------*/
 type CreateProductForm = {
   title: string;
@@ -66,6 +67,12 @@ const initialForm: CreateProductForm = {
   sku: "",
 };
 
+type SizeType = "alpha" | "numeric" | "custom";
+type SizeVariant = { size: string; quantity: number };
+
+const ALPHA_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
+const NUMERIC_SIZES = Array.from({ length: 9 }, (_, i) => (38 + i).toString());
+
 export default function SellerProductNewPage() {
   const utils = trpc.useUtils();
 
@@ -84,15 +91,25 @@ export default function SellerProductNewPage() {
     },
   });
 
+  // State
   const [form, setForm] = useState<CreateProductForm>(initialForm);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Variant State
+  const [noSizes, setNoSizes] = useState(false);
+  const [sizeType, setSizeType] = useState<SizeType>("alpha");
+  const [variants, setVariants] = useState<SizeVariant[]>([{ size: "S", quantity: 1 }]);
+
   const canUseAi = canUseAiFeatures(
     (me?.subscription?.plan ?? "FREE") as Parameters<typeof canUseAiFeatures>[0]
   );
 
+  /* -----------------------------
+     STORE SELECTION
+  ------------------------------*/
   const storeOptions = stores ?? [];
   const hasStores = storeOptions.length > 0;
   const dashboardStoreId = dashboard?.store?.id;
@@ -105,6 +122,40 @@ export default function SellerProductNewPage() {
     : defaultStoreId;
   const isSubmitDisabled =
     createProduct.isPending || storesLoading || !selectedStoreId;
+
+  /* -----------------------------
+     VARIANT HANDLERS
+  ------------------------------*/
+  const addVariant = () => setVariants((v) => [...v, { size: "", quantity: 1 }]);
+  const removeVariant = (index: number) => setVariants((v) => v.filter((_, i) => i !== index));
+
+  const sizeOptions = () => {
+    if (sizeType === "alpha") return ALPHA_SIZES;
+    if (sizeType === "numeric") return NUMERIC_SIZES;
+    return [];
+  };
+
+  const usedSizes = new Set(variants.map((v) => v.size.trim()).filter(Boolean));
+
+  const updateVariant = (index: number, key: keyof SizeVariant, value: string | number) => {
+    setVariants((prev) => {
+      const next = [...prev];
+      const nextRow = { ...next[index], [key]: value };
+
+      // Enforce uniqueness when setting size (no duplicate sizes across rows)
+      if (key === "size") {
+        const chosen = String(value).trim();
+        for (let i = 0; i < next.length; i++) {
+          if (i !== index && next[i].size.trim() === chosen && chosen) {
+            next[i] = { ...next[i], size: "" };
+          }
+        }
+      }
+
+      next[index] = nextRow;
+      return next;
+    });
+  };
 
   /* -----------------------------
      IMAGE UPLOAD
@@ -151,8 +202,7 @@ export default function SellerProductNewPage() {
     try {
       const result = await generateListing.mutateAsync({
         productName: form.title,
-        category:
-          categories?.find((c) => c.id === form.categoryId)?.name ?? "",
+        category: categories?.find((c) => c.id === form.categoryId)?.name ?? "",
         condition: "New",
       });
 
@@ -178,9 +228,7 @@ export default function SellerProductNewPage() {
     }
 
     if (!selectedStoreId) {
-      setError(
-        "Select a store before creating this product, or create your store first."
-      );
+      setError("Select a store before creating this product, or create your store first.");
       return;
     }
 
@@ -194,6 +242,12 @@ export default function SellerProductNewPage() {
 
     const sku = form.sku?.trim() || generateSku(form.title, selectedStoreId);
 
+    const sizesQuantities = noSizes
+      ? undefined
+      : variants
+          .filter((v) => v.size.trim() !== "")
+          .map((v) => ({ size: v.size.trim(), quantity: Number(v.quantity) }));
+
     try {
       await createProduct.mutateAsync({
         storeId: selectedStoreId,
@@ -201,14 +255,10 @@ export default function SellerProductNewPage() {
         title: form.title,
         description: form.description,
         price: Number(form.price),
-        comparePrice: form.comparePrice
-          ? Number(form.comparePrice)
-          : undefined,
+        comparePrice: form.comparePrice ? Number(form.comparePrice) : undefined,
         stock: Number(form.stock || 0),
-        images:
-          images.length > 0
-            ? images
-            : ["https://placehold.co/600x600/png"],
+        sizesQuantities,
+        images: images.length > 0 ? images : ["https://placehold.co/600x600/png"],
         tags: form.tags
           .split(",")
           .map((t) => t.trim())
@@ -218,6 +268,7 @@ export default function SellerProductNewPage() {
 
       setSuccess("Product created successfully.");
       setForm(initialForm);
+      setVariants([{ size: "S", quantity: 1 }]);
       setUploadedImages([]);
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Create failed"));
@@ -228,13 +279,10 @@ export default function SellerProductNewPage() {
     <PageShell showVerificationBanner>
       <SellerPageShell activeHref="/seller/products">
         <div className="mx-auto max-w-5xl px-4 py-10">
-
           <div className="mb-6 flex items-start justify-between">
             <div>
               <h1 className="text-2xl font-semibold">Create product</h1>
-              <p className="text-sm text-zinc-500">
-                Add a new listing to your store.
-              </p>
+              <p className="text-sm text-zinc-500">Add a new listing to your store.</p>
             </div>
 
             <Button asChild variant="outline">
@@ -243,24 +291,20 @@ export default function SellerProductNewPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-2">
-
-            {/* LEFT */}
+            {/* LEFT COLUMN */}
             <div className="space-y-6">
-
+              {/* Basic Details */}
               <Card>
                 <CardHeader>
                   <CardTitle>Basic details</CardTitle>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-
                   <div>
                     <Label>Title</Label>
                     <Input
                       value={form.title}
-                      onChange={(e) =>
-                        setForm((c) => ({ ...c, title: e.target.value }))
-                      }
+                      onChange={(e) => setForm((c) => ({ ...c, title: e.target.value }))}
                     />
                   </div>
 
@@ -269,12 +313,7 @@ export default function SellerProductNewPage() {
                     <textarea
                       className="h-32 w-full rounded-md border px-3 py-2 text-sm"
                       value={form.description}
-                      onChange={(e) =>
-                        setForm((c) => ({
-                          ...c,
-                          description: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => setForm((c) => ({ ...c, description: e.target.value }))}
                     />
                   </div>
 
@@ -290,25 +329,22 @@ export default function SellerProductNewPage() {
                       Generate AI description
                     </Button>
                   )}
-
                 </CardContent>
               </Card>
 
+              {/* Pricing Section */}
               <Card>
                 <CardHeader>
                   <CardTitle>Pricing & stock</CardTitle>
                 </CardHeader>
 
                 <CardContent className="grid gap-4 sm:grid-cols-2">
-
                   <div>
                     <Label>Price</Label>
                     <Input
                       type="number"
                       value={form.price}
-                      onChange={(e) =>
-                        setForm((c) => ({ ...c, price: e.target.value }))
-                      }
+                      onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
                     />
                   </div>
 
@@ -317,23 +353,7 @@ export default function SellerProductNewPage() {
                     <Input
                       type="number"
                       value={form.comparePrice}
-                      onChange={(e) =>
-                        setForm((c) => ({
-                          ...c,
-                          comparePrice: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <Label>Stock</Label>
-                    <Input
-                      type="number"
-                      value={form.stock}
-                      onChange={(e) =>
-                        setForm((c) => ({ ...c, stock: e.target.value }))
-                      }
+                      onChange={(e) => setForm((c) => ({ ...c, comparePrice: e.target.value }))}
                     />
                   </div>
 
@@ -341,109 +361,200 @@ export default function SellerProductNewPage() {
                     <Label>SKU (optional)</Label>
                     <Input
                       value={form.sku}
-                      onChange={(e) =>
-                        setForm((c) => ({ ...c, sku: e.target.value }))
-                      }
+                      onChange={(e) => setForm((c) => ({ ...c, sku: e.target.value }))}
                     />
-                    <p className="text-xs text-zinc-500">
-                      Auto-generated if empty
-                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">Auto-generated if empty</p>
                   </div>
 
+                  <div className="flex flex-col justify-center">
+                    <Label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={noSizes}
+                        onChange={(e) => setNoSizes(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      <span>Product has no sizes/variants</span>
+                    </Label>
+                  </div>
+
+                  {noSizes && (
+                    <div className="sm:col-span-2">
+                      <Label>Total Stock</Label>
+                      <Input
+                        type="number"
+                        value={form.stock}
+                        onChange={(e) => setForm((c) => ({ ...c, stock: e.target.value }))}
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
+              {/* Variants Section */}
+              {!noSizes && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Variants</CardTitle>
+                      <select
+                        className="rounded-md border px-2 py-1 text-sm"
+                        value={sizeType}
+                        onChange={(e) => setSizeType(e.target.value as SizeType)}
+                      >
+                        <option value="alpha">Alpha (S, M, L)</option>
+                        <option value="numeric">Numeric (38-46)</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="space-y-4">
+                    {variants.map((variant, index) => (
+                      <div key={index} className="flex items-end gap-3">
+                        <div className="flex-1">
+                          <Label>Size</Label>
+                          {sizeType === "custom" ? (
+                            <Input
+                              value={variant.size}
+                              onChange={(e) => updateVariant(index, "size", e.target.value)}
+                              placeholder="e.g. One Size"
+                            />
+                          ) : (() => {
+                            const current = variant.size.trim();
+                            const options = sizeOptions().filter((opt) => {
+                              if (!opt) return false;
+                              if (current && opt === current) return true;
+                              return !usedSizes.has(opt);
+                            });
+
+                            return (
+                              <select
+                                className="w-full mt-1 rounded-md border px-2 py-1 text-sm"
+                                value={variant.size}
+                                onChange={(e) => updateVariant(index, "size", e.target.value)}
+                              >
+                                <option value="">Select</option>
+                                {options.map((opt) => (
+                                  <option key={opt} value={opt}>
+                                    {opt}
+                                  </option>
+                                ))}
+                              </select>
+                            );
+                          })()}
+                        </div>
+
+                        <div className="w-24">
+                          <Label>Qty</Label>
+                          <Input
+                            type="number"
+                            value={variant.quantity}
+                            onChange={(e) => updateVariant(index, "quantity", e.target.value)}
+                          />
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeVariant(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+
+                    <Button type="button" variant="outline" size="sm" onClick={addVariant}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add size
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
-            {/* RIGHT */}
+            {/* RIGHT COLUMN */}
             <div className="space-y-6">
 
               <Card>
-                <CardHeader>
-                  <CardTitle>Store settings</CardTitle>
-                </CardHeader>
+                              <CardHeader>
+                                <CardTitle>Store settings</CardTitle>
+                              </CardHeader>
+              
+                              <CardContent className="space-y-4">
+              
+                              <div className="grid gap-4 sm:grid-cols-2 pt-2">
+                                <div>
+                                  <Label>Category</Label>
+                                  <select
+                                    className="w-full rounded-md border px-3 py-2 text-sm"
+                                    value={form.categoryId}
+                                    onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}
+                                  >
+                                    <option value="">Select category</option>
+                                    {categories?.map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
 
-                <CardContent className="space-y-4">
-
-                  <div>
-                    <Label>Category</Label>
-
-                    <select
-                      className="w-full rounded-md border px-3 py-2 text-sm"
-                      value={form.categoryId}
-                      onChange={(e) =>
-                        setForm((c) => ({
-                          ...c,
-                          categoryId: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select category</option>
-                      {categories?.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-
-                  </div>
-
-                  <div>
-                    <Label>Store</Label>
-                    <div className="mt-1 flex items-center gap-3">
-                      {storesLoading ? (
-                        <div className="text-sm text-zinc-500">Loading stores...</div>
-                      ) : hasStores ? (
-                        <select
-                          className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
-                          value={selectedStoreId}
-                          onChange={(e) =>
-                            setForm((c) => ({ ...c, storeId: e.target.value }))
-                          }
-                        >
-                          <option value="">Select store</option>
-                          {storeOptions.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="text-sm text-zinc-500">No stores yet</div>
-                      )}
-
-                      <Button variant="outline" asChild size="sm">
-                        <Link href="/seller/store">Create store</Link>
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label>Tags</Label>
-                    <Input
-                      value={form.tags}
-                      onChange={(e) =>
-                        setForm((c) => ({ ...c, tags: e.target.value }))
-                      }
-                    />
-                  </div>
-
-                </CardContent>
-              </Card>
-
-              {/* IMAGE UPLOAD (RESTORED) */}
+                                <div>
+                                  <Label>Tags (comma separated)</Label>
+                                  <Input
+                                    value={form.tags}
+                                    onChange={(e) => setForm((c) => ({ ...c, tags: e.target.value }))}
+                                  />
+                                </div>
+                              </div>
+                          
+                                <div>
+                                  <Label>Store</Label>
+                                  <div className="mt-1 flex items-center gap-3">
+                                    {storesLoading ? (
+                                      <div className="text-sm text-zinc-500">Loading stores...</div>
+                                    ) : hasStores ? (
+                                      <select
+                                        className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
+                                        value={selectedStoreId}
+                                        onChange={(e) =>
+                                          setForm((c) => ({ ...c, storeId: e.target.value }))
+                                        }
+                                      >
+                                        <option value="">Select store</option>
+                                        {storeOptions.map((s) => (
+                                          <option key={s.id} value={s.id}>
+                                            {s.name}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <div className="text-sm text-zinc-500">No stores yet</div>
+                                    )}
+              
+                                    <Button variant="outline" asChild size="sm">
+                                      <Link href="/seller/store">Create store</Link>
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                            
+              {/* Media Settings */}
               <Card>
                 <CardHeader>
                   <CardTitle>Media</CardTitle>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-
-                  <label className="block cursor-pointer rounded-xl border border-dashed p-4 text-center">
+                  <label className="block cursor-pointer rounded-xl border border-dashed p-4 text-center hover:bg-zinc-50 transition-colors">
                     <div className="flex justify-center mb-2">
-                      <Plus />
+                      <Plus className="text-zinc-400" />
                     </div>
-                    <p className="text-sm">Upload images</p>
+                    <p className="text-sm font-medium">Upload images</p>
                     <input
                       type="file"
                       hidden
@@ -453,18 +564,14 @@ export default function SellerProductNewPage() {
                     />
                   </label>
 
-                  {uploading && (
-                    <p className="text-sm text-zinc-500">
-                      Uploading...
-                    </p>
-                  )}
+                  {uploading && <p className="text-sm text-zinc-500 text-center">Uploading...</p>}
 
                   {uploadedImages.length > 0 && (
                     <div className="grid grid-cols-2 gap-2">
                       {uploadedImages.map((url) => (
                         <div
                           key={url}
-                          className="relative h-24 w-full overflow-hidden rounded-md"
+                          className="relative h-24 w-full overflow-hidden rounded-md border"
                         >
                           <Image
                             src={url}
@@ -477,36 +584,17 @@ export default function SellerProductNewPage() {
                       ))}
                     </div>
                   )}
-
-                  <textarea
-                    className="w-full border rounded-md p-2 text-sm"
-                    placeholder="Image URLs (optional)"
-                    value={form.imageUrls}
-                    onChange={(e) =>
-                      setForm((c) => ({
-                        ...c,
-                        imageUrls: e.target.value,
-                      }))
-                    }
-                  />
-
                 </CardContent>
               </Card>
 
-              {/* STATUS */}
-              {error && (
-                <div className="text-sm text-red-600">{error}</div>
-              )}
+              {/* Status Messages */}
+              <div className="flex flex-col gap-2">
+                {error && <div className="text-sm font-medium text-red-600">{error}</div>}
+                {success && <div className="text-sm font-medium text-green-600">{success}</div>}
+              </div>
 
-              {success && (
-                <div className="text-sm text-green-600">{success}</div>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isSubmitDisabled}
-              >
+              {/* Submit Action */}
+              <Button type="submit" className="w-full" disabled={isSubmitDisabled}>
                 {createProduct.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -514,7 +602,6 @@ export default function SellerProductNewPage() {
                 )}
                 Create product
               </Button>
-
             </div>
           </form>
         </div>

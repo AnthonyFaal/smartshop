@@ -31,14 +31,7 @@ type SellerQueueItemUser = {
 
 type SellerQueueItem = {
   id: string;
-  shop_city?: string | null;
-  shop_region?: string | null;
-  shop_address?: string | null;
-  latitude?: unknown;
-  longitude?: unknown;
   ghanaCardFrontUrl?: string | null;
-  ghanaCardBackUrl?: string | null;
-  ghanaCardNumber?: string | null;
   selfieUrl?: string | null;
   isLocationVerified?: boolean | null;
   status?: string | null;
@@ -198,9 +191,6 @@ export default function AdminDashboardPage() {
                             </p>
                             <Badge variant="secondary">{queueLabel}</Badge>
                           </div>
-                          <p className="mt-1 text-sm text-zinc-500">
-                            {item.shop_city ? `${item.shop_city}, ${item.shop_region ?? ""}` : "Location details pending"}
-                          </p>
                           <p className="mt-1 text-xs text-zinc-400">Trust score: {trustScore}</p>
                         </div>
                         <div className="flex items-center gap-2">

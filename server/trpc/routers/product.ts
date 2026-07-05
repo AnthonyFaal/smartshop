@@ -69,7 +69,21 @@ export const productRouter = createTRPCRouter({
         description: z.string().min(10),
         price: z.number().positive(),
         comparePrice: z.number().positive().optional(),
+
+        // Backwards compatible: single stock for non-sized products
         stock: z.number().int().min(0),
+
+        // New: size -> quantity variants for sized products.
+        // If provided, these quantities will be persisted to ProductSizeInventory.
+        sizesQuantities: z
+          .array(
+            z.object({
+              size: z.string().trim().min(1).max(40),
+              quantity: z.number().int().min(0).max(99999),
+            })
+          )
+          .optional(),
+
         images: z.array(z.string().url()).min(1).max(10),
         tags: z.array(z.string()).optional(),
         sku: z.string().optional(),

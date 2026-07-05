@@ -7,6 +7,12 @@ import type { ProductStatus, Prisma } from "@prisma/client";
 
 const PRODUCT_CACHE_TTL = 300;
 
+function assertNonNegativeInt(value: number, fieldName: string) {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+    throw Errors.badRequest(`${fieldName} must be a non-negative integer`);
+  }
+}
+
 export interface ProductListInput {
   cursor?: string;
   limit?: number;
@@ -50,7 +56,7 @@ export async function listProducts(input: ProductListInput) {
     }),
     orderBy,
     include: {
-      store: { select: { id: true, name: true, slug: true, logoUrl: true, isVerified: true } },
+      store: { select: { id: true, name: true, slug: true, logoUrl: true, verificationStatus: true } },
       category: { select: { id: true, name: true, slug: true } },
     },
   });
@@ -143,7 +149,7 @@ async function fetchProduct(id: string) {
           name: true,
           slug: true,
           logoUrl: true,
-          isVerified: true,
+          verificationStatus: true,
           rating: true,
           reviewCount: true,
           ownerId: true,
@@ -167,7 +173,25 @@ async function fetchProduct(id: string) {
     });
   }
 
-  return product;
+  if (!product) return null;
+
+  const productVariants = await prisma.productVariant.findMany({
+    where: { productId: id },
+    select: { size: true, quantity: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const hasVariants = productVariants.length > 0;
+  const effectiveStock = hasVariants
+    ? productVariants.reduce((sum: number, v) => sum + v.quantity, 0)
+    : product.stock;
+
+  return {
+    ...product,
+    variants: hasVariants ? productVariants : [],
+    effectiveStock,
+    // Keep `stock` as stored in DB; UI should use effectiveStock.
+  };
 }
 
 export async function createProduct(
@@ -180,6 +204,7 @@ export async function createProduct(
     price: number;
     comparePrice?: number;
     stock: number;
+    sizesQuantities?: Array<{ size: string; quantity: number }>;
     images: string[];
     tags?: string[];
     sku?: string;
@@ -229,30 +254,116 @@ export async function createProduct(
   }
 
   const product = await prisma.$transaction(async (tx) => {
-    const created = await tx.product.create({
-      data: {
-        sellerId,
-        storeId: input.storeId,
-        categoryId: resolvedCategoryId,
-        title: input.title,
-        slug,
-        description: input.description,
-        price: input.price,
-        comparePrice: input.comparePrice,
-        stock: input.stock,
-        images: input.images,
-        tags: input.tags ?? [],
-        sku: input.sku,
-        status: input.stock > 0 ? "ACTIVE" : "OUT_OF_STOCK",
-      },
-    });
+    const normalizedSizesQuantities = (input.sizesQuantities ?? [])
+      .map((sq) => ({
+        size: sq.size.trim(),
+        quantity: sq.quantity,
+      }))
+      .filter((v) => v.size.length > 0);
 
-    await tx.store.update({
-      where: { id: input.storeId },
-      data: { productCount: { increment: 1 } },
-    });
+    // Variant-mode switch is strict and mutually exclusive:
+    // - if seller indicates variants (sizesQuantities provided and non-empty), require >= 1 variant entry.
+    // - in variant-mode, product.stock must be 0 and variants are the only source of inventory.
+    // - if seller indicates no variants (sizesQuantities absent/empty), reject any variant data and use product.stock only.
+    const isVariantMode = (input.sizesQuantities?.length ?? 0) > 0;
 
-    return created;
+    if (isVariantMode) {
+      if (normalizedSizesQuantities.length < 1) {
+        throw Errors.badRequest(
+          "Variant-based products require at least one valid variant entry (size + stock)."
+        );
+      }
+
+      for (const v of normalizedSizesQuantities) {
+        assertNonNegativeInt(
+          v.quantity,
+          `variant stock for size "${v.size}"`
+        );
+      }
+
+      const totalVariantStock = normalizedSizesQuantities.reduce(
+        (sum: number, v) => sum + v.quantity,
+        0
+      );
+
+      // Important: Prisma relation field name is `variants` on Product,
+      // and ProductVariant has columns: `size` and `stock`.
+      const created = await tx.product.create({
+        data: {
+          sellerId,
+          storeId: input.storeId,
+          categoryId: resolvedCategoryId,
+          title: input.title,
+          slug,
+          description: input.description,
+          price: input.price,
+          comparePrice: input.comparePrice,
+          // Product-level stock is not used in variant mode.
+          stock: 0,
+          images: input.images,
+          tags: input.tags ?? [],
+          sku: input.sku,
+          status: totalVariantStock > 0 ? "ACTIVE" : "OUT_OF_STOCK",
+        },
+      });
+
+      // Create variant rows for variant-based inventory.
+      // Use direct prisma delegate (transaction-safety relies on outer $transaction).
+      await tx.productVariant.createMany({
+        data: normalizedSizesQuantities.map((v) => ({
+          productId: created.id,
+          size: v.size,
+          quantity: v.quantity,
+        })),
+      });
+
+      await tx.store.update({
+        where: { id: input.storeId },
+        data: { productCount: { increment: 1 } },
+      });
+
+      return created;
+    } else {
+      // Simple mode: must not create variants, must use product.stock only.
+      assertNonNegativeInt(input.stock, "stock");
+
+      const hasAnyVariantData =
+        (input.sizesQuantities?.length ?? 0) > 0 &&
+        (input.sizesQuantities ?? []).some(
+          (x) => String(x.size).trim().length > 0
+        );
+
+      if (hasAnyVariantData) {
+        throw Errors.badRequest(
+          "Simple products cannot include variants. Remove variant data (sizesQuantities)."
+        );
+      }
+
+      const created = await tx.product.create({
+        data: {
+          sellerId,
+          storeId: input.storeId,
+          categoryId: resolvedCategoryId,
+          title: input.title,
+          slug,
+          description: input.description,
+          price: input.price,
+          comparePrice: input.comparePrice,
+          stock: input.stock,
+          images: input.images,
+          tags: input.tags ?? [],
+          sku: input.sku,
+          status: input.stock > 0 ? "ACTIVE" : "OUT_OF_STOCK",
+        },
+      });
+
+      await tx.store.update({
+        where: { id: input.storeId },
+        data: { productCount: { increment: 1 } },
+      });
+
+      return created;
+    }
   });
 
   return product;
@@ -278,12 +389,35 @@ export async function updateProduct(
   });
   if (!product) throw Errors.notFound("Product");
 
+  const variantCount = await prisma.productVariant.count({
+    where: { productId },
+  });
+
+  const productHasVariants = variantCount > 0;
+
+  // Inventory mode immutability:
+  // - Variant-based products must never accept stock changes on product.stock (or imply a mode switch).
+  // - Simple products must never accept a transition to variant inventory (not possible here since update input has no variants).
+  if (productHasVariants) {
+    if (input.stock !== undefined) {
+      throw Errors.badRequest(
+        "Variant-based products are inventory-controlled by variants; product stock cannot be updated."
+      );
+    }
+  } else {
+    // Simple mode: product.stock updates are allowed.
+    // No variant-mode data is accepted via this endpoint (variants are not part of input).
+  }
+
   const updated = await prisma.product.update({
     where: { id: productId },
     data: {
       ...input,
+      // If caller explicitly sets status, respect it.
+      ...(input.status !== undefined ? { status: input.status } : null),
+      // If caller updates product.stock in simple mode, maintain simple status derivation.
       ...(input.stock !== undefined && {
-        status: input.stock > 0 ? input.status ?? "ACTIVE" : "OUT_OF_STOCK",
+        status: input.stock > 0 ? (input.status ?? "ACTIVE") : "OUT_OF_STOCK",
       }),
     },
   });
