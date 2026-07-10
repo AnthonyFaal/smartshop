@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -82,6 +83,7 @@ export default function SellerProductNewPage() {
   const { data: categories } = trpc.product.categories.useQuery();
   const { data: stores, isLoading: storesLoading } = trpc.store.list.useQuery();
 
+  const router = useRouter();
   const generateListing = trpc.ai.generateListing.useMutation();
 
   const createProduct = trpc.product.create.useMutation({
@@ -103,9 +105,11 @@ export default function SellerProductNewPage() {
   const [sizeType, setSizeType] = useState<SizeType>("alpha");
   const [variants, setVariants] = useState<SizeVariant[]>([{ size: "S", quantity: 1 }]);
 
-  const canUseAi = canUseAiFeatures(
-    (me?.subscription?.plan ?? "FREE") as Parameters<typeof canUseAiFeatures>[0]
-  );
+  const subscriptionPlan =
+    (me?.subscription?.plan ?? "FREE") as Parameters<typeof canUseAiFeatures>[0];
+  const subscriptionStatus = me?.subscription?.status ?? "EXPIRED";
+  const canUseAi =
+    canUseAiFeatures(subscriptionPlan) && subscriptionStatus === "ACTIVE";
 
   /* -----------------------------
      STORE SELECTION
@@ -197,7 +201,9 @@ export default function SellerProductNewPage() {
      AI DESCRIPTION
   ------------------------------*/
   const handleGenerateListing = async () => {
+    if (generateListing.isPending) return;
     setError(null);
+    setSuccess(null);
 
     try {
       const result = await generateListing.mutateAsync({
@@ -206,8 +212,71 @@ export default function SellerProductNewPage() {
         condition: "New",
       });
 
-      setForm((c) => ({ ...c, description: result.result }));
-      setSuccess("Description generated.");
+      const raw = typeof result?.result === "string" ? result.result : "";
+
+      // Helper: remove common markdown/bullet artifacts to keep description UI clean.
+      const cleanPlainText = (text: string) => {
+        return text
+          .replace(/\r\n/g, "\n")
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => line.replace(/^(\*|-|\+)\s+/, "")) // strip leading bullets
+          .join("\n\n");
+      };
+
+      type ListingGen = {
+        title?: string;
+        description?: string;
+        tags?: string[];
+        priceRange?: { min?: number; max?: number };
+      };
+
+      let parsed: ListingGen | null = null;
+
+      try {
+        parsed = JSON.parse(raw) as ListingGen;
+      } catch {
+        parsed = null;
+      }
+
+      setForm((c) => {
+        // Always improve: keep user-entered values if AI doesn’t provide them.
+        const nextTitle =
+          typeof parsed?.title === "string" && parsed.title.trim().length > 0
+            ? parsed.title.trim()
+            : c.title;
+
+        const nextDescription =
+          typeof parsed?.description === "string" && parsed.description.trim().length > 0
+            ? cleanPlainText(parsed.description)
+            : c.description;
+
+        const nextTagsArr = Array.isArray(parsed?.tags)
+          ? parsed.tags.filter((t) => typeof t === "string" && t.trim().length > 0)
+          : null;
+
+        const nextTags =
+          nextTagsArr && nextTagsArr.length > 0
+            ? nextTagsArr.map((t) => t.trim()).join(", ")
+            : c.tags;
+
+        // Optionally set price only if user hasn’t entered one yet.
+        const nextPrice =
+          (!c.price || c.price.trim() === "") && parsed?.priceRange?.min !== undefined
+            ? String(parsed.priceRange.min)
+            : c.price;
+
+        return {
+          ...c,
+          title: nextTitle,
+          description: nextDescription,
+          tags: nextTags,
+          price: nextPrice,
+        };
+      });
+
+      setSuccess("Listing details generated.");
     } catch (e: unknown) {
       setError(getErrorMessage(e, "AI generation failed"));
     }
@@ -226,6 +295,25 @@ export default function SellerProductNewPage() {
       setError("Title and price are required.");
       return;
     }
+
+    const priceN = Number(form.price);
+    if (!Number.isFinite(priceN) || priceN < 1) {
+      setError("Price must be at least 1.");
+      return;
+    }
+
+    const comparePriceN = form.comparePrice?.toString().trim()
+      ? Number(form.comparePrice)
+      : null;
+    if (comparePriceN !== null && (!Number.isFinite(comparePriceN) || comparePriceN < 1)) {
+      setError("Compare price must be at least 1.");
+      return;
+    }
+
+    if (comparePriceN !== null && comparePriceN <= priceN) {
+        setError("Was price must be higher than current price.");
+        return;
+      }
 
     if (!selectedStoreId) {
       setError("Select a store before creating this product, or create your store first.");
@@ -248,15 +336,32 @@ export default function SellerProductNewPage() {
           .filter((v) => v.size.trim() !== "")
           .map((v) => ({ size: v.size.trim(), quantity: Number(v.quantity) }));
 
+    if (noSizes) {
+      const stockN = Number(form.stock || 0);
+      if (!Number.isFinite(stockN) || stockN < 1) {
+        setError("Stock must be at least 1.");
+        return;
+      }
+    } else {
+      for (const v of variants) {
+        if (v.size.trim().length === 0) continue;
+        const qN = Number(v.quantity);
+        if (!Number.isFinite(qN) || qN < 1) {
+          setError("Variant quantity must be at least 1.");
+          return;
+        }
+      }
+    }
+
     try {
-      await createProduct.mutateAsync({
+      const created = await createProduct.mutateAsync({
         storeId: selectedStoreId,
         categoryId: form.categoryId || undefined,
         title: form.title,
         description: form.description,
         price: Number(form.price),
         comparePrice: form.comparePrice ? Number(form.comparePrice) : undefined,
-        stock: Number(form.stock || 0),
+        stock: noSizes ? 1 : Number(form.stock), // server requires stock; variants-mode ignores it but keeps schema happy
         sizesQuantities,
         images: images.length > 0 ? images : ["https://placehold.co/600x600/png"],
         tags: form.tags
@@ -270,6 +375,8 @@ export default function SellerProductNewPage() {
       setForm(initialForm);
       setVariants([{ size: "S", quantity: 1 }]);
       setUploadedImages([]);
+
+      router.push("/seller/products");
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Create failed"));
     }
@@ -296,7 +403,7 @@ export default function SellerProductNewPage() {
               {/* Basic Details */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Basic details</CardTitle>
+                  <CardTitle></CardTitle>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
@@ -322,11 +429,13 @@ export default function SellerProductNewPage() {
                       type="button"
                       variant="secondary"
                       onClick={handleGenerateListing}
-                      disabled={!form.title || !form.categoryId}
+                      disabled={
+                        generateListing.isPending || !form.title || !form.categoryId
+                      }
                       className="w-full"
                     >
                       <Sparkles className="mr-2 h-4 w-4" />
-                      Generate AI description
+                      {generateListing.isPending ? "Generating..." : "Generate AI description"}
                     </Button>
                   )}
                 </CardContent>
@@ -343,17 +452,39 @@ export default function SellerProductNewPage() {
                     <Label>Price</Label>
                     <Input
                       type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
                       value={form.price}
-                      onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setForm((c) => ({ ...c, price: next }));
+                      }}
+                      onBlur={() => {
+                        const n = Number(form.price);
+                        if (!Number.isFinite(n) || n < 1) setForm((c) => ({ ...c, price: "1" }));
+                      }}
                     />
                   </div>
 
                   <div>
-                    <Label>Compare price</Label>
+                    <Label>Was price (optional)</Label>
+                    
                     <Input
                       type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
                       value={form.comparePrice}
-                      onChange={(e) => setForm((c) => ({ ...c, comparePrice: e.target.value }))}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setForm((c) => ({ ...c, comparePrice: next }));
+                      }}
+                      onBlur={() => {
+                        if (!form.comparePrice?.toString().trim()) return;
+                        const n = Number(form.comparePrice);
+                        if (!Number.isFinite(n) || n < 1) setForm((c) => ({ ...c, comparePrice: "1" }));
+                      }}
                     />
                   </div>
 
@@ -383,6 +514,9 @@ export default function SellerProductNewPage() {
                       <Label>Total Stock</Label>
                       <Input
                         type="number"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
                         value={form.stock}
                         onChange={(e) => setForm((c) => ({ ...c, stock: e.target.value }))}
                       />
@@ -449,8 +583,19 @@ export default function SellerProductNewPage() {
                           <Label>Qty</Label>
                           <Input
                             type="number"
+                            inputMode="numeric"
+                            min={1}
+                            step={1}
                             value={variant.quantity}
-                            onChange={(e) => updateVariant(index, "quantity", e.target.value)}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const n = Number(raw);
+                              updateVariant(
+                                index,
+                                "quantity",
+                                Number.isFinite(n) && n >= 1 ? raw : "1"
+                              );
+                            }}
                           />
                         </div>
 

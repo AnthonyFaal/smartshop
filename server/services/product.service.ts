@@ -13,6 +13,12 @@ function assertNonNegativeInt(value: number, fieldName: string) {
   }
 }
 
+function assertPositiveInt(value: number, fieldName: string) {
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
+    throw Errors.badRequest(`${fieldName} must be a positive integer (>= 1)`);
+  }
+}
+
 export interface ProductListInput {
   cursor?: string;
   limit?: number;
@@ -78,7 +84,10 @@ export async function listSellerProducts(
     search?: string;
   } = {}
 ) {
-  return prisma.product.findMany({
+  // Seller inventory list must be variant-aware.
+  // If a product has variants (ProductVariant rows), we show effectiveStock = sum(quantity)
+  // and allow updates via those variants (not product.stock).
+  const products = await prisma.product.findMany({
     where: {
       sellerId,
       deletedAt: null,
@@ -122,24 +131,62 @@ export async function listSellerProducts(
           slug: true,
         },
       },
+      variants: {
+        select: {
+          id: true,
+          size: true,
+          quantity: true,
+          createdAt: true,
+        },
+      },
     },
+  });
+
+  return products.map((p) => {
+    const hasVariants = (p.variants?.length ?? 0) > 0;
+    const effectiveStock = hasVariants
+      ? (p.variants ?? []).reduce((sum, v) => sum + v.quantity, 0)
+      : p.stock;
+
+    return {
+      ...p,
+      effectiveStock,
+      variants: hasVariants ? p.variants : [],
+    };
   });
 }
 
 export async function getProduct(id: string) {
-  const cached = await cacheGet<Awaited<ReturnType<typeof fetchProduct>>>(
-    cacheKeys.product(id)
-  );
+  const cached = await cacheGet<
+    Awaited<ReturnType<typeof fetchProductById>>
+  >(cacheKeys.product(id));
   if (cached) return cached;
 
-  const product = await fetchProduct(id);
+  const product = await fetchProductById(id);
   if (product) {
     await cacheSet(cacheKeys.product(id), product, PRODUCT_CACHE_TTL);
   }
   return product;
 }
 
-async function fetchProduct(id: string) {
+export async function getProductBySlug(slug: string) {
+  // Reuse the same cached shape but key it by slug.
+  // cacheKeys.product(...) already uses a string; this is safe as long as
+  // we don't mix UUID and slug under the same key accidentally.
+  const cacheKey = `product:slug:${slug}`;
+  const cached = await cacheGet<Awaited<ReturnType<typeof fetchProductBySlug>>>(
+    cacheKey
+  );
+  if (cached) return cached;
+
+  const product = await fetchProductBySlug(slug);
+  if (product) {
+    await cacheSet(cacheKey, product, PRODUCT_CACHE_TTL);
+  }
+  return product;
+}
+
+async function fetchProductById(id: string) {
   const product = await prisma.product.findFirst({
     where: { id, deletedAt: null },
     include: {
@@ -175,8 +222,62 @@ async function fetchProduct(id: string) {
 
   if (!product) return null;
 
+  return buildProductWithVariants({
+    product,
+    productId: id,
+  });
+}
+
+async function fetchProductBySlug(slug: string) {
+  const product = await prisma.product.findFirst({
+    where: { slug, deletedAt: null },
+    include: {
+      store: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          logoUrl: true,
+          verificationStatus: true,
+          rating: true,
+          reviewCount: true,
+          ownerId: true,
+        },
+      },
+      category: { select: { id: true, name: true, slug: true } },
+      seller: {
+        select: {
+          id: true,
+          verificationLevel: true,
+          trustScore: { select: { score: true } },
+        },
+      },
+    },
+  });
+
+  if (product && product.status === "ACTIVE") {
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { viewCount: { increment: 1 } },
+    });
+  }
+
+  if (!product) return null;
+
+  return buildProductWithVariants({
+    product,
+    productId: product.id,
+  });
+}
+
+async function buildProductWithVariants(args: {
+  product: any; // Prisma Product with includes above
+  productId: string;
+}) {
+  const { product, productId } = args;
+
   const productVariants = await prisma.productVariant.findMany({
-    where: { productId: id },
+    where: { productId },
     select: { size: true, quantity: true },
     orderBy: { createdAt: "asc" },
   });
@@ -275,10 +376,7 @@ export async function createProduct(
       }
 
       for (const v of normalizedSizesQuantities) {
-        assertNonNegativeInt(
-          v.quantity,
-          `variant stock for size "${v.size}"`
-        );
+        assertPositiveInt(v.quantity, `variant stock for size "${v.size}"`);
       }
 
       const totalVariantStock = normalizedSizesQuantities.reduce(
@@ -325,7 +423,7 @@ export async function createProduct(
       return created;
     } else {
       // Simple mode: must not create variants, must use product.stock only.
-      assertNonNegativeInt(input.stock, "stock");
+      assertPositiveInt(input.stock, "stock");
 
       const hasAnyVariantData =
         (input.sizesQuantities?.length ?? 0) > 0 &&
@@ -369,6 +467,26 @@ export async function createProduct(
   return product;
 }
 
+export function computeUpdatedPriceAndCompare(args: {
+  currentPrice: number;
+  newPrice: number;
+  currentComparePrice: number | null | undefined;
+  // comparePrice is not used as history; it's only a function of discount logic.
+}): { updatedPrice: number; updatedComparePrice: number | null } {
+  const { currentPrice, newPrice } = args;
+
+  // Rule 1: Always set updatedPrice = newPrice
+  const updatedPrice = newPrice;
+
+  // Rule 2/3 + edge-cases:
+  // comparePrice ONLY used to show discount.
+  // - If newPrice < currentPrice => updatedComparePrice = currentPrice
+  // - else (>=) => clear compare price (null)
+  const updatedComparePrice = newPrice < currentPrice ? currentPrice : null;
+
+  return { updatedPrice, updatedComparePrice };
+}
+
 export async function updateProduct(
   sellerId: string,
   productId: string,
@@ -409,21 +527,124 @@ export async function updateProduct(
     // No variant-mode data is accepted via this endpoint (variants are not part of input).
   }
 
+  const priceUpdate =
+    input.price !== undefined
+      ? computeUpdatedPriceAndCompare({
+          currentPrice: Number(product.price),
+          newPrice: input.price,
+          currentComparePrice: product.comparePrice
+            ? Number(product.comparePrice)
+            : null,
+        })
+      : null;
+
   const updated = await prisma.product.update({
     where: { id: productId },
     data: {
-      ...input,
+      // IMPORTANT: if `price` is being updated, we ignore any caller-provided `comparePrice`
+      // and deterministically compute it using the discount rules.
+      ...(priceUpdate
+        ? {
+            price: priceUpdate.updatedPrice,
+            comparePrice: priceUpdate.updatedComparePrice,
+          }
+        : input),
       // If caller explicitly sets status, respect it.
       ...(input.status !== undefined ? { status: input.status } : null),
       // If caller updates product.stock in simple mode, maintain simple status derivation.
       ...(input.stock !== undefined && {
-        status: input.stock > 0 ? (input.status ?? "ACTIVE") : "OUT_OF_STOCK",
+        status: input.stock > 0
+          ? input.status ?? "ACTIVE"
+          : "OUT_OF_STOCK",
       }),
     },
   });
 
   await cacheDelete(cacheKeys.product(productId));
   return updated;
+}
+
+export async function updateVariantStocks(
+  sellerId: string,
+  productId: string,
+  input: Array<{ id: string; quantity: number }>
+) {
+  const product = await prisma.product.findFirst({
+    where: { id: productId, sellerId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!product) throw Errors.notFound("Product");
+
+  const variantCount = await prisma.productVariant.count({
+    where: { productId },
+  });
+
+  if (variantCount === 0) {
+    throw Errors.badRequest(
+      "This product does not have variants; variant stock cannot be updated."
+    );
+  }
+
+  // Validate and normalize
+  const normalized = input.map((v) => ({
+    id: v.id,
+    quantity: v.quantity,
+  }));
+
+  for (const v of normalized) {
+    assertNonNegativeInt(v.quantity, "variant quantity");
+  }
+
+  const providedIds = normalized.map((v) => v.id);
+
+  // Ensure all provided variants belong to the product
+  const variants = await prisma.productVariant.findMany({
+    where: { id: { in: providedIds }, productId },
+    select: { id: true },
+  });
+
+  const foundIds = new Set(variants.map((v) => v.id));
+  const missing = providedIds.filter((id) => !foundIds.has(id));
+  if (missing.length > 0) {
+    throw Errors.badRequest(
+      "One or more variants do not belong to this product."
+    );
+  }
+
+  // Update quantities
+  await prisma.productVariant.updateMany({
+    // Prisma updateMany doesn't support per-row values, so do sequential updates.
+    // Kept small since inventory edits are per-variant.
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    where: { id: { in: providedIds } },
+    data: { quantity: 0 },
+  });
+
+  // Above can't set differing quantities; redo with per-variant updates in transaction-like fashion.
+  // We do per-row updates to ensure correctness.
+  for (const v of normalized) {
+    await prisma.productVariant.update({
+      where: { id: v.id },
+      data: { quantity: v.quantity },
+    });
+  }
+
+  const totalQuantity = await prisma.productVariant.aggregate({
+    where: { productId },
+    _sum: { quantity: true },
+  });
+
+  const sum = totalQuantity._sum.quantity ?? 0;
+
+  const newStatus: ProductStatus = sum > 0 ? "ACTIVE" : "OUT_OF_STOCK";
+
+  await prisma.product.update({
+    where: { id: productId },
+    data: { status: newStatus },
+  });
+
+  await cacheDelete(cacheKeys.product(productId));
+  return { productId, totalQuantity: sum, status: newStatus };
 }
 
 export async function deleteProduct(

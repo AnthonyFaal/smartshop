@@ -73,10 +73,14 @@ export const storeRouter = createTRPCRouter({
           .optional()
           .nullable(),
 
-        // Store location (Ghana-only flow: address + region + city(+town) are required)
+        // Store location
+        // Migration window:
+        // - Prefer canonical `locationId`
+        // - Keep legacy `city`/`region` optional so old UI/data can still work
         address: z.string().trim().min(3).max(255),
-        city: z.string().trim().min(2).max(100),
-        region: z.string().trim().min(2).max(100),
+        locationId: z.string().uuid().optional(),
+        city: z.string().trim().min(2).max(100).optional(),
+        region: z.string().trim().min(2).max(100).optional(),
         country: z.string().trim().max(100).optional().default("Ghana"),
         latitude: z.number(),
         longitude: z.number(),
@@ -113,6 +117,43 @@ export const storeRouter = createTRPCRouter({
 
       const slug = await createUniqueStoreSlug(input.name);
 
+      // Resolve canonical locationId during migration window.
+      // Strategy:
+      // - If caller provides locationId, trust it.
+      // - Else try to map legacy city/region to a first-class Location:
+      //   - Prefer exact name match for CITY or TOWN under the provided region
+      //   - Fallback to city name-only match
+      let resolvedLocationId: string | undefined = input.locationId;
+
+      if (!resolvedLocationId) {
+        const legacyRegion = input.region?.trim() || undefined;
+        const legacyCity = input.city?.trim() || undefined;
+
+        if (legacyRegion && legacyCity) {
+          const match = await (prisma as any).location.findFirst({
+            where: {
+              region: legacyRegion,
+              name: legacyCity,
+              type: { in: ["CITY", "TOWN", "AREA", "DISTRICT", "SUBURB", "REGION", "COUNTRY"] },
+            },
+            select: { id: true },
+          });
+
+          resolvedLocationId = match?.id ?? undefined;
+        }
+
+        if (!resolvedLocationId && legacyCity) {
+          const match = await (prisma as any).location.findFirst({
+            where: {
+              name: legacyCity,
+            },
+            select: { id: true },
+          });
+
+          resolvedLocationId = match?.id ?? undefined;
+        }
+      }
+
       return prisma.store.create({
         data: {
           ownerId: ctx.user.id,
@@ -121,17 +162,9 @@ export const storeRouter = createTRPCRouter({
           description: input.description || null,
           logoUrl: input.logoUrl ?? null,
           bannerUrl: input.bannerUrl ?? null,
-
           address: input.address ?? null,
-          city: input.city ?? null,
-          region: input.region ?? null,
-          country: input.country ?? "Ghana",
-
-          latitude: input.latitude ?? null,
-          longitude: input.longitude ?? null,
-
-          // Verification should follow the real verification flow.
-          // Keep schema default (PENDING) by not overriding it.
+          locationId: resolvedLocationId ?? null,
+          
         },
         select: {
           id: true,

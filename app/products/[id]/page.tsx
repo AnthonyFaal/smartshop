@@ -1,9 +1,19 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import { ShieldCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  Star,
+  ChevronDown, 
+  ChevronUp
+} from "lucide-react";
+
+
 import { toast } from "sonner";
 
 import { Header } from "@/components/layout/header";
@@ -14,14 +24,35 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc/client";
 import { formatCurrency } from "@/lib/utils/format";
+import { useInitialAuthUser } from "@/components/providers/auth-provider";
+import { StarPicker, StarRating } from "@/components/ui/star-rating";
 
 export default function ProductDetailPage() {
+  const initialUser = useInitialAuthUser();
   const params = useParams<{ id: string }>();
   const utils = trpc.useUtils();
 
   const { data: product, isLoading } = trpc.product.get.useQuery({
     id: params.id,
   });
+
+  const defaultWishlist = trpc.wishlist.getDefaultWishlist.useQuery(undefined, {
+    enabled: !!params.id,
+  });
+
+  const myWishlistItemsQuery = trpc.wishlist.getWishlistItems.useQuery(
+    {
+      wishlistId: defaultWishlist.data?.id,
+    },
+    {
+      enabled: !!defaultWishlist.data?.id,
+    }
+  );
+
+  const isWishlisted =
+    (myWishlistItemsQuery.data ?? []).some(
+      (i) => i.productId === product?.id
+    ) ?? false;
 
   const addToCart = trpc.cart.add.useMutation({
     onSuccess: async () => {
@@ -74,6 +105,15 @@ export default function ProductDetailPage() {
     (a, b) => a + b,
     0
   );
+
+  const toggleWishlistMutation = trpc.wishlist.toggleDefault.useMutation({
+    onSuccess: async () => {
+      await myWishlistItemsQuery.refetch();
+      await defaultWishlist.refetch();
+      toast.success(isWishlisted ? "Removed from wishlist" : "Saved to wishlist");
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const handleAddToCart = () => {
     if (hasVariants && Object.keys(variantQuantities).length === 0) {
@@ -131,7 +171,7 @@ export default function ProductDetailPage() {
                 </Button>
 
                 <div className="flex flex-1 gap-2 overflow-auto">
-                  {product.images.map((img, idx) => (
+                  {(product.images as string[]).map((img: string, idx: number) => (
                     <button
                       key={idx}
                       onClick={() => setSelectedImageIndex(idx)}
@@ -178,7 +218,7 @@ export default function ProductDetailPage() {
                   {product.categoryId ? "Category" : "Category"}
                 </Badge>
 
-                {product.store.isVerified && (
+                {product.store.verificationStatus && (
                   <Badge variant="outline" className="text-emerald-700">
                     <ShieldCheck className="mr-1 h-3 w-3" />
                     Verified
@@ -210,6 +250,53 @@ export default function ProductDetailPage() {
             <p className="leading-relaxed text-zinc-600">
               {product.description}
             </p>
+
+            {/* WISHLIST + REVIEWS */}
+            <div className="space-y-6 border-t pt-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                    disabled={!initialUser}
+                    className="rounded-full"
+                    onClick={() => {
+                      if (!initialUser) return;
+                      if (!product?.id) return;
+                      toggleWishlistMutation.mutate({ productId: product.id });
+                    }}
+                  >
+                    <Heart
+                      className={`h-4 w-4 ${isWishlisted ? "fill-rose-500 text-rose-500" : ""}`}
+                    />
+                  </Button>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Star className="h-4 w-4 text-amber-500" aria-hidden />
+                      <span className="text-sm font-medium text-zinc-900">
+                        {Number(product.rating).toFixed(1)} / 5
+                      </span>
+                      <span className="text-sm text-zinc-500">
+                        ({product.reviewCount} reviews)
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500">
+                      Updated instantly after you post or edit.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <StarRating value={Number(product.rating)} />
+                </div>
+              </div>
+
+              {/* MY REVIEW FORM + LIST */}
+              <ReviewsSection productId={product.id} />
+            </div>
 
             {/* VARIANTS (HCI REDESIGN) */}
             {hasVariants && (
@@ -337,6 +424,329 @@ function NotFoundState() {
   return (
     <div className="flex h-screen items-center justify-center">
       Product not found.
+    </div>
+  );
+}
+
+function ReviewsSection({ productId }: { productId: string }) {
+  const initialUser = useInitialAuthUser();
+  
+  const { data: queriedUser } = trpc.auth.me.useQuery();
+  const user = queriedUser ?? initialUser ?? null;
+
+  const utils = trpc.useUtils();
+
+  const myReviewQuery = trpc.review.getMyReview.useQuery(
+    { productId },
+    { enabled: !!user }
+  );
+
+
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [limit] = useState(10);
+
+  const pagedQuery = trpc.review.listProduct.useQuery(
+    { productId, cursor, limit },
+    { enabled: true }
+  );
+
+  const [title, setTitle] = useState<string>("");
+  const [content, setContent] = useState<string>("");
+  const [rating, setRating] = useState<number>(myReviewQuery.data?.rating ?? 0);
+
+  useEffect(() => {
+    setTitle(myReviewQuery.data?.title ?? "");
+    setContent(myReviewQuery.data?.content ?? "");
+    setRating(myReviewQuery.data?.rating ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myReviewQuery.data?.id]);
+
+  const upsertMutation = trpc.review.upsertMyReview.useMutation({
+    onSuccess: async () => {
+      setCursor(undefined);
+      await utils.review.listProduct.invalidate({ productId, cursor: undefined, limit });
+      await utils.review.getMyReview.invalidate({ productId });
+      toast.success("Review saved");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const deleteMutation = trpc.review.deleteMyReview.useMutation({
+    onSuccess: async () => {
+      setCursor(undefined);
+      await utils.review.listProduct.invalidate({ productId, cursor: undefined, limit });
+      await utils.review.getMyReview.invalidate({ productId });
+      toast.success("Review deleted");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const canSubmit = !!user && rating >= 1 && rating <= 5;
+
+  return (
+    <div className="space-y-6 pt-2">
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold text-zinc-900">
+          Reviews
+        </h2>
+        <p className="text-sm text-zinc-500">
+          Share your experience to help others.
+        </p>
+      </div>
+
+      {/* REVIEW FORM */}
+      <div className="rounded-lg border bg-white overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setReviewOpen((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-4 text-left hover:bg-zinc-50"
+        >
+          <div>
+            <div className="font-medium">
+              {myReviewQuery.data ? "Edit your review" : "Write a review"}
+            </div>
+
+            <div className="text-sm text-zinc-500">
+              Share your experience with other buyers.
+            </div>
+          </div>
+
+          {reviewOpen ? (
+            <ChevronUp className="h-5 w-5 text-zinc-500" />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-zinc-500" />
+          )}
+        </button>
+
+        {reviewOpen && (
+          <div className="border-t p-4">
+            <div className="rounded-lg border bg-white p-4">
+
+        {!user ? (
+
+          <div className="text-sm text-zinc-600">
+
+            Sign in to write a review.
+
+          </div>
+
+        ) : (
+
+          <div className="space-y-4">
+
+            <div className="flex items-center gap-3">
+
+              <div className="text-sm font-medium text-zinc-700">
+
+                Your rating
+
+              </div>
+
+              <StarPicker
+
+                value={rating || 0}
+
+                onChange={(next) => setRating(next)}
+
+              />
+
+            </div>
+
+
+
+            <div className="space-y-2">
+
+              <label className="text-sm font-medium text-zinc-700">
+
+                Title (optional)
+
+              </label>
+
+              <input
+
+                value={title}
+
+                onChange={(e) => setTitle(e.target.value)}
+
+                placeholder="Short summary"
+
+                className="w-full rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+
+              />
+
+            </div>
+
+
+
+            <div className="space-y-2">
+
+              <label className="text-sm font-medium text-zinc-700">
+
+                Review
+
+              </label>
+
+              <textarea
+
+                value={content}
+
+                onChange={(e) => setContent(e.target.value)}
+
+                placeholder="Tell us what you liked or disliked..."
+
+                rows={4}
+
+                className="w-full resize-none rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+
+              />
+
+            </div>
+
+
+
+            <div className="flex flex-wrap items-center gap-3">
+
+              <Button
+
+                type="button"
+
+                disabled={!canSubmit || upsertMutation.isPending}
+
+                onClick={() => {
+
+                  if (!user) return;
+
+                  upsertMutation.mutate({
+
+                    productId,
+
+                    rating,
+
+                    title: title.trim() ? title.trim() : null,
+
+                    content: content.trim() ? content.trim() : null,
+
+                  });
+
+                }}
+
+              >
+
+                {myReviewQuery.data ? "Update review" : "Post review"}
+
+              </Button>
+
+
+
+              {myReviewQuery.data?.id && (
+
+                <Button
+
+                  type="button"
+
+                  variant="outline"
+
+                  disabled={deleteMutation.isPending}
+
+                  onClick={() => deleteMutation.mutate({ productId })}
+
+                  className="border-zinc-200"
+
+                >
+
+                  Delete
+
+                </Button>
+
+              )}
+
+            </div>
+
+
+
+            {myReviewQuery.data?.isVerified && (
+
+              <div className="flex items-center gap-2 text-xs text-emerald-700">
+
+                <ShieldCheck className="h-4 w-4" />
+
+                Verified purchase
+
+              </div>
+
+            )}
+
+          </div>
+
+        )}
+
+      </div>
+          </div>
+        )}
+      </div>
+
+      {/* REVIEW LIST */}
+    <div className="space-y-3">
+        {pagedQuery.data?.reviews?.length === 0 && (
+          <div className="text-sm text-zinc-500">No reviews yet.</div>
+        )}
+
+        {pagedQuery.data?.reviews?.map((r) => (
+          <div key={r.id} className="rounded-lg border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <StarRating value={r.rating} />
+                <span className="text-sm font-medium text-zinc-900">
+                  {r.rating} / 5
+                </span>
+                {r.isVerified && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Verified
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-zinc-500">
+                {new Date(r.createdAt).toLocaleDateString()}
+              </div>
+            </div>
+
+            <div className="mt-2 text-sm font-medium text-zinc-900">
+              {r.title ?? " "}
+            </div>
+
+            {r.content && (
+              <div className="mt-2 text-sm text-zinc-700">
+                {r.content}
+              </div>
+            )}
+
+            <div className="mt-3 text-xs text-zinc-500">
+              By{" "}
+              <span className="font-medium text-zinc-700">
+                {r.user.displayName ?? "User"}
+              </span>
+            </div>
+          </div>
+        ))}
+
+        {/* LOAD MORE */}
+        {pagedQuery.data?.nextCursor && (
+          <div className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pagedQuery.isFetching}
+              onClick={() => {
+                setCursor(pagedQuery.data?.nextCursor);
+              }}
+            >
+              Load more
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

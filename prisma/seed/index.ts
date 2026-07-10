@@ -1,4 +1,4 @@
-import { seedAdmin, seedSubscriptionOfferings, seedCategories } from "./core.seed";
+import { seedAdmin, seedSubscriptionOfferings, seedCategories , seedLocations} from "./core.seed";
 import { seedDemoSeller, seedDemoProducts } from "./demo.seed";
 
 async function main() {
@@ -9,6 +9,7 @@ async function main() {
   await seedAdmin();
   await seedSubscriptionOfferings();
   await seedCategories();
+  await seedLocations();
 
   // ONLY IN DEV OR EXPLICIT DEMO MODE
   if (!isProd || isDemoSeed) {
@@ -20,6 +21,7 @@ async function main() {
 }
 
 main()
+
   .catch((e) => {
     console.error(e);
     process.exit(1);

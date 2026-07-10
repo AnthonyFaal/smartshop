@@ -103,6 +103,7 @@ export default function AdminGhanaCardReviewPage() {
                     verificationId={item.id}
                     userDisplay={item.user?.profile?.displayName ?? item.user?.email ?? "Seller applicant"}
                     frontUrl={item.ghanaCardFrontUrl ?? "—"}
+                    backUrl={null}
                     reason={reasonById[item.id] ?? ""}
                     setReason={(v) =>
                       setReasonById((prev) => ({ ...prev, [item.id]: v }))
@@ -121,7 +122,6 @@ export default function AdminGhanaCardReviewPage() {
 function GhanaCardRow({
   verificationId,
   userDisplay,
-  ghanaNumber,
   frontUrl,
   backUrl,
   reason,
@@ -129,7 +129,6 @@ function GhanaCardRow({
 }: {
   verificationId: string;
   userDisplay: string;
-  ghanaNumber: string;
   frontUrl: string;
   backUrl: string | null;
   reason: string;
@@ -164,10 +163,7 @@ function GhanaCardRow({
     <div className="rounded-lg border border-zinc-200 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="font-medium text-zinc-900 truncate">{userDisplay}</p>
-          <p className="mt-1 text-sm text-zinc-500">
-            GH Card: {ghanaNumber || "—"}
-          </p>
+          <p className="font-medium text-zinc-900 truncate">{userDisplay}</p>         
           <div className="mt-2 space-y-1">
             <p className="text-xs text-zinc-500">Front URL</p>
             <p className="break-all text-xs text-zinc-700">{frontUrl}</p>

@@ -78,14 +78,14 @@ export async function addToCart(
       const qty = item.quantity;
       const size = item.selectedSize?.trim() ?? "";
       
-      const variants = product.variants as Array<{ size: string; stock: number }>;
+      const variants = product.variants as Array<{ size: string; quantity: number }>;
       const hasVariants = variants.length > 0;
 
       // Validation
       if (hasVariants) {
         if (!size) throw Errors.badRequest("Select a size");
         const inv = variants.find((x) => x.size === size);
-        if (!inv || inv.stock < qty) throw Errors.badRequest(`Insufficient stock for ${size}`);
+        if (!inv || inv.quantity < qty) throw Errors.badRequest(`Insufficient stock for ${size}`);
       } else if (product.stock < qty) {
         throw Errors.badRequest("Insufficient stock");
       }

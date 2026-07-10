@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, Plus, Store as StoreIcon } from "lucide-react";
 
-import { GHANA_REGIONS } from "@/lib/ghana/regions";
 
 
 import { PageShell } from "@/components/layout/page-shell";
@@ -25,11 +24,11 @@ type StoreForm = {
 
   // Location (Ghana-only)
   address: string;
-  region: string;
-  city: string;
-  town: string;
-  country: "Ghana";
 
+  // Canonical location
+  locationId: string;
+
+  // Derived coordinates
   latitude: number | null;
   longitude: number | null;
 };
@@ -42,10 +41,7 @@ const initialForm: StoreForm = {
   bannerUrl: "",
 
   address: "",
-  region: "",
-  city: "",
-  town: "",
-  country: "Ghana",
+  locationId: "",
 
   latitude: null,
   longitude: null,
@@ -64,10 +60,9 @@ export default function SellerStorePage() {
 
   const [form, setForm] = useState<StoreForm>(initialForm);
 
-  // Note: Store model only has `city` and `region` fields.
-  // UX mapping:
-  // - “Developed municipality” (stored in DB `city`)
-  // - “Area/Town under it” (stored in DB `town`, appended into `city` as "Municipality, Area")
+  // Location UX (migration window):
+  // - User picks a canonical `Location` from DB-backed search
+  // - We persist `locationId` (backend keeps legacy fields during transition)
 
 
 
@@ -76,17 +71,13 @@ export default function SellerStorePage() {
 
 
 
-  const selectedRegion = useMemo(
-    () => GHANA_REGIONS.find((r) => r.name === form.region) ?? null,
-    [form.region]
+  const [locationQuery, setLocationQuery] = useState("");
+  const locationResults = trpc.location.search.useQuery(
+    { query: locationQuery.trim() },
+    { enabled: locationQuery.trim().length >= 2 }
   );
 
-  const selectedCity = useMemo(() => {
-    if (!selectedRegion) return null;
-    return selectedRegion.cities.find((c) => c.name === form.city) ?? null;
-  }, [selectedRegion, form.city]);
-
-  const cityTowns = selectedCity?.towns ?? [];
+  const results = locationResults.data ?? [];
 
 
 
@@ -100,12 +91,12 @@ export default function SellerStorePage() {
   const storeList = stores ?? [];
   const locationReady =
     form.address.trim().length > 0 &&
-    form.region.trim().length > 0 &&
-    form.city.trim().length > 0 &&
+    form.locationId.trim().length > 0 &&
     form.latitude != null &&
     form.longitude != null;
 
-  const canSubmit = form.name.trim().length >= 2 && locationReady && !createStore.isPending;
+  const canSubmit =
+    form.name.trim().length >= 2 && locationReady && !createStore.isPending;
 
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -125,12 +116,8 @@ export default function SellerStorePage() {
         setError("Address is required.");
         return;
       }
-      if (!form.region.trim()) {
-        setError("Region is required.");
-        return;
-      }
-      if (!form.city.trim()) {
-        setError("Developed municipality / area is required.");
+      if (!form.locationId.trim()) {
+        setError("Please select a location.");
         return;
       }
       if (form.latitude == null || form.longitude == null) {
@@ -144,8 +131,7 @@ export default function SellerStorePage() {
         logoUrl: sanitizeOptionalString(form.logoUrl),
         bannerUrl: sanitizeOptionalString(form.bannerUrl),
         address: form.address.trim(),
-        city: `${form.city}${form.town ? `, ${form.town}` : ""}`.trim(),
-        region: form.region.trim(),
+        locationId: form.locationId.trim(),
         country: "Ghana",
         latitude: form.latitude,
         longitude: form.longitude,
@@ -312,141 +298,57 @@ export default function SellerStorePage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="store-region">Region</Label>
-                      <select
-                        id="store-region"
-                        className="flex h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
-                        value={form.region}
-                        onChange={(e) => {
-                          const regionName = e.target.value;
-                          const region = GHANA_REGIONS.find(
-                            (r) => r.name === regionName
-                          );
+                      <Label htmlFor="store-location">Location</Label>
+                      <Input
+                        id="store-location"
+                        value={locationQuery}
+                        onChange={(e) => setLocationQuery(e.target.value)}
+                        placeholder="Search: Madina, Tema, Osu, East Legon..."
+                      />
 
-                          const firstCity = region?.cities?.[0];
-                          const firstTown = firstCity?.towns?.[0];
+                      {locationResults.isFetching ? (
+                        <p className="text-xs text-zinc-500">Searching...</p>
+                      ) : null}
 
-                          const nextCityName = firstCity?.name ?? "";
-                          const nextTownName = firstTown?.name ?? "";
+                      {locationQuery.trim().length >= 2 && results.length > 0 ? (
+                        <div className="mt-2 max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-white">
+                          {results.slice(0, 10).map((loc) => (
+                            <button
+                              key={loc.id}
+                              type="button"
+                              className="block w-full px-3 py-2 text-left hover:bg-zinc-50"
+                              onClick={() => {
+                                setForm((current) => ({
+                                  ...current,
+                                  locationId: loc.id,
+                                  latitude: loc.latitude ? Number(loc.latitude) : null,
+                                  longitude: loc.longitude ? Number(loc.longitude) : null,
+                                }));
+                              }}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-zinc-900">
+                                  {loc.name}
+                                </span>
+                                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
+                                  {loc.type}
+                                </span>
+                              </div>
+                              {loc.region ? (
+                                <div className="text-xs text-zinc-500">
+                                  {loc.region}
+                                </div>
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
 
-                          const coord = firstTown
-                            ? { latitude: firstTown.latitude, longitude: firstTown.longitude }
-                            : firstCity
-                              ? { latitude: firstCity.latitude, longitude: firstCity.longitude }
-                              : { latitude: null, longitude: null };
-
-                          setForm((current) => ({
-                            ...current,
-                            region: regionName,
-                            city: nextCityName,
-                            town: nextTownName,
-                            latitude: coord.latitude,
-                            longitude: coord.longitude,
-                          }));
-                        }}
-                      >
-                        <option value="" disabled>
-                          Select a region
-                        </option>
-                        {GHANA_REGIONS.map((region) => (
-                          <option key={region.name} value={region.name}>
-                            {region.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="store-city">Developed municipality</Label>
-                      <select
-                        id="store-city"
-                        className="flex h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
-                        value={form.city}
-                        disabled={!form.region}
-                        onChange={(e) => {
-                          const cityName = e.target.value;
-                          const region = GHANA_REGIONS.find(
-                            (r) => r.name === form.region
-                          );
-                          const city = region?.cities?.find(
-                            (c) => c.name === cityName
-                          );
-                          const firstTown = city?.towns?.[0];
-
-                          const nextTownName = firstTown?.name ?? "";
-                          const coord = firstTown
-                            ? { latitude: firstTown.latitude, longitude: firstTown.longitude }
-                            : city
-                              ? { latitude: city.latitude, longitude: city.longitude }
-                              : { latitude: null, longitude: null };
-
-                          setForm((current) => ({
-                            ...current,
-                            city: cityName,
-                            town: nextTownName,
-                            latitude: coord.latitude,
-                            longitude: coord.longitude,
-                          }));
-                        }}
-                      >
-                        <option value="" disabled>
-                          Select a developed municipality
-                        </option>
-                        {(selectedRegion?.cities ?? []).map((city) => (
-                          <option key={city.name} value={city.name}>
-                            {city.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="store-town">Area (town under it)</Label>
-                      <select
-                        id="store-town"
-                        className="flex h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
-                        value={form.town}
-                        disabled={!form.region || !form.city}
-                        onChange={(e) => {
-                          const townName = e.target.value;
-                          const region = GHANA_REGIONS.find(
-                            (r) => r.name === form.region
-                          );
-                          const city = region?.cities?.find(
-                            (c) => c.name === form.city
-                          );
-                          const town = city?.towns?.find(
-                            (t) => t.name === townName
-                          );
-
-                          setForm((current) => ({
-                            ...current,
-                            town: townName,
-                            latitude: town?.latitude ?? current.latitude,
-                            longitude: town?.longitude ?? current.longitude,
-                          }));
-                        }}
-                      >
-                        <option value="">
-                          {(() => {
-                            const region = GHANA_REGIONS.find(
-                              (r) => r.name === form.region
-                            );
-                            const city = region?.cities?.find(
-                              (c) => c.name === form.city
-                            );
-                          return city?.towns && city.towns.length > 0
-                            ? "Select an area"
-                            : "No areas available";
-                        })()}
-                        </option>
-
-                        {(cityTowns ?? []).map((town) => (
-                          <option key={town.name} value={town.name}>
-                            {town.name}
-                          </option>
-                        ))}
-                      </select>
+                      {form.locationId ? (
+                        <div className="mt-2 text-xs text-zinc-600">
+                          Selected location saved.
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 

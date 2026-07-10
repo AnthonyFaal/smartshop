@@ -16,12 +16,17 @@ import type { AiFeature } from "@prisma/client";
 async function checkAiQuota(userId: string): Promise<void> {
   const subscription = await prisma.subscription.findUnique({
     where: { userId },
+    select: { plan: true, status: true },
   });
 
   const plan = subscription?.plan ?? SubscriptionPlan.FREE;
-  if (!canUseAiFeatures(plan)) {
+  const status = subscription?.status ?? "EXPIRED";
+
+  // Prevent confusion: UI may show eligibility based on plan, but AI must
+  // only run when subscription is actually ACTIVE.
+  if (!canUseAiFeatures(plan) || status !== "ACTIVE") {
     throw Errors.subscriptionLimit(
-      "AI tools are available only for paid seller plans."
+      "AI tools are available only for ACTIVE paid seller plans."
     );
   }
 
@@ -103,7 +108,23 @@ export const aiRouter = createTRPCRouter({
       await checkAiQuota(ctx.user.id);
       const result = await complete(
         getSystemPrompt("LISTING_GENERATION"),
-        `Generate a product listing for: ${JSON.stringify(input)}. Include title, description, suggested tags, and price range in GHS.`
+        [
+          `Generate a product listing for: ${JSON.stringify(input)}.`,
+          `Return STRICT JSON ONLY (no markdown, no bullet points, no extra text).`,
+          `JSON schema:`,
+          `{`,
+          `  "title": string,`,
+          `  "description": string,`,
+          `  "tags": string[],`,
+          `  "priceRange": { "min": number, "max": number }`,
+          `}`,
+          ``,
+          `Rules:`,
+          `- description must be plain text only (max 3 short paragraphs).`,
+          `- description must NOT contain markdown formatting (no "*", no "-" bullets, no headings).`,
+          `- tags must be an array of clean tag strings WITHOUT "#" (e.g. ["ElectronicBrush","SmartCleaning"]).`,
+          `- priceRange values must be numbers in GHS.`,
+        ].join("\n")
       );
       await logAiUsage(ctx.user.id, "LISTING_GENERATION", result);
       return { result: result.content };

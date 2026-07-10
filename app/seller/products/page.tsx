@@ -65,6 +65,10 @@ export default function SellerProductsPage() {
   const [status, setStatus] = useState<ProductStatus | "ALL">("ALL");
   const [error, setError] = useState<string | null>(null);
 
+  // Per-product price update drafts
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [savingPriceFor, setSavingPriceFor] = useState<string | null>(null);
+
   const { data: stores, isLoading: storesLoading } = trpc.store.list.useQuery();
   const {
     data: products,
@@ -126,6 +130,28 @@ export default function SellerProductsPage() {
       await deleteProduct.mutateAsync({ id });
     } catch (e: unknown) {
       setError(getErrorMessage(e, "Unable to archive product."));
+    }
+  };
+
+  const handlePriceUpdate = async (id: string) => {
+    setError(null);
+
+    const draft = priceDrafts[id];
+    const nextPrice = Number(draft);
+
+    if (!Number.isFinite(nextPrice) || nextPrice < 1) {
+      setError("New price must be at least 1.");
+      return;
+    }
+
+    try {
+      setSavingPriceFor(id);
+      await updateProduct.mutateAsync({ id, price: nextPrice });
+      setPriceDrafts((c) => ({ ...c, [id]: "" }));
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Unable to update product price."));
+    } finally {
+      setSavingPriceFor((cur) => (cur === id ? null : cur));
     }
   };
 
@@ -333,41 +359,69 @@ export default function SellerProductsPage() {
                             </p>
                           </div>
 
-                          <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-                            {product.status !== "ACTIVE" && canActivate ? (
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">
+                            <div className="flex flex-wrap justify-start gap-2">
+                              {product.status !== "ACTIVE" && canActivate ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={isBusy}
+                                  onClick={() => handleStatusChange(product.id, "ACTIVE")}
+                                >
+                                  Publish
+                                </Button>
+                              ) : null}
+                              {product.status === "ACTIVE" ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isBusy}
+                                  onClick={() => handleStatusChange(product.id, "DRAFT")}
+                                >
+                                  Unpublish
+                                </Button>
+                              ) : null}
+                              {product.status !== "ARCHIVED" ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isBusy}
+                                  onClick={() => handleArchive(product.id)}
+                                >
+                                  <Archive className="h-3.5 w-3.5" />
+                                  Archive
+                                </Button>
+                              ) : null}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Input
+                                className="h-9 w-28"
+                                type="number"
+                                min={1}
+                                step={1}
+                                placeholder="New price"
+                                value={priceDrafts[product.id] ?? ""}
+                                onChange={(e) =>
+                                  setPriceDrafts((c) => ({
+                                    ...c,
+                                    [product.id]: e.target.value,
+                                  }))
+                                }
+                                disabled={savingPriceFor !== null && savingPriceFor !== product.id}
+                              />
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="secondary"
-                                disabled={isBusy}
-                                onClick={() => handleStatusChange(product.id, "ACTIVE")}
+                                disabled={savingPriceFor === product.id || isBusy}
+                                onClick={() => handlePriceUpdate(product.id)}
                               >
-                                Publish
+                                {savingPriceFor === product.id ? "Saving..." : "Update"}
                               </Button>
-                            ) : null}
-                            {product.status === "ACTIVE" ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusy}
-                                onClick={() => handleStatusChange(product.id, "DRAFT")}
-                              >
-                                Unpublish
-                              </Button>
-                            ) : null}
-                            {product.status !== "ARCHIVED" ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={isBusy}
-                                onClick={() => handleArchive(product.id)}
-                              >
-                                <Archive className="h-3.5 w-3.5" />
-                                Archive
-                              </Button>
-                            ) : null}
+                            </div>
                           </div>
                         </div>
                       );

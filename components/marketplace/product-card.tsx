@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils/format";
 import { ShieldCheck, Star } from "lucide-react";
+import { StoreVerificationStatus } from "@prisma/client";
 
 interface ProductCardProps {
   product: {
@@ -19,7 +20,7 @@ interface ProductCardProps {
     store: {
       name: string;
       slug: string;
-      isVerified: boolean;
+      verificationStatus: StoreVerificationStatus;
       
     };
   };
@@ -69,7 +70,7 @@ export function ProductCard({ product }: ProductCardProps) {
           </h3>
           <div className="flex items-center gap-1 text-xs text-zinc-500">
             <span>{product.store.name}</span>
-            {product.store.isVerified && (
+            {product.store.verificationStatus && (
               <ShieldCheck className="h-3 w-3 text-blue-500" aria-label="Verified store" />
             )}
           </div>

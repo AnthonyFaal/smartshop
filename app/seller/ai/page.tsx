@@ -12,7 +12,8 @@ import { canUseAiFeatures } from "@/lib/config/subscriptions";
 export default function SellerAiPage() {
   const { data: me } = trpc.auth.me.useQuery();
   const plan = me?.subscription?.plan ?? "FREE";
-  const aiEnabled = canUseAiFeatures(plan as any);
+  const status = me?.subscription?.status ?? "EXPIRED";
+  const aiEnabled = canUseAiFeatures(plan as any) && status === "ACTIVE";
 
   return (
     <PageShell showVerificationBanner>

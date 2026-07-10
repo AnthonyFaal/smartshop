@@ -14,20 +14,6 @@ interface ProductGridProps {
   sortOrder?: "asc" | "desc";
 }
 
-type ProductItem = {
-  id: string;
-  title: string;
-  slug: string;
-  price: { toString(): string } | number;
-  images: string[];
-  rating: { toString(): string } | number;
-  comparePrice?: { toString(): string } | number | null;
-  store: {
-    name: string;
-    slug: string;
-    isVerified: boolean;
-  };
-};
 
 export function ProductGrid({
   search,
@@ -53,8 +39,7 @@ export function ProductGrid({
       }
     );
 
-  const products =
-    data?.pages.flatMap((page) => page.products as ProductItem[]) ?? [];
+  const products = data?.pages.flatMap((page) => page.products) ?? [];
 
   if (isLoading && products.length === 0) {
     return (

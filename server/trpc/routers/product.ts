@@ -47,8 +47,22 @@ export const productRouter = createTRPCRouter({
 
   get: publicProcedure
     .use(withErrorHandling)
-    .input(z.object({ id: z.string().uuid() }))
-    .query(async ({ input }) => productService.getProduct(input.id)),
+    .input(
+      z.object({
+        id: z.union([z.string().uuid(), z.string().min(1)]),
+      })
+    )
+    .query(async ({ input }) => {
+      const raw = input.id;
+
+      // UUIDs stay on the existing fast path (product primary key).
+      if (z.string().uuid().safeParse(raw).success) {
+        return productService.getProduct(raw);
+      }
+
+      // Otherwise treat `id` as product slug.
+      return productService.getProductBySlug(raw);
+    }),
 
   categories: publicProcedure
     .use(withErrorHandling)
@@ -67,11 +81,11 @@ export const productRouter = createTRPCRouter({
         categoryId: z.string().uuid().optional(),
         title: z.string().min(3).max(300),
         description: z.string().min(10),
-        price: z.number().positive(),
-        comparePrice: z.number().positive().optional(),
+        price: z.number().int().min(1),
+        comparePrice: z.number().int().min(1).optional(),
 
         // Backwards compatible: single stock for non-sized products
-        stock: z.number().int().min(0),
+        stock: z.number().int().min(1),
 
         // New: size -> quantity variants for sized products.
         // If provided, these quantities will be persisted to ProductSizeInventory.
@@ -79,7 +93,7 @@ export const productRouter = createTRPCRouter({
           .array(
             z.object({
               size: z.string().trim().min(1).max(40),
-              quantity: z.number().int().min(0).max(99999),
+              quantity: z.number().int().min(1).max(99999),
             })
           )
           .optional(),
@@ -100,9 +114,9 @@ export const productRouter = createTRPCRouter({
         id: z.string().uuid(),
         title: z.string().min(3).max(300).optional(),
         description: z.string().min(10).optional(),
-        price: z.number().positive().optional(),
-        comparePrice: z.number().positive().nullable().optional(),
-        stock: z.number().int().min(0).optional(),
+        price: z.number().int().min(1).optional(),
+        comparePrice: z.number().int().min(1).nullable().optional(),
+        stock: z.number().int().min(1).optional(),
         images: z.array(z.string().url()).optional(),
         tags: z.array(z.string()).optional(),
         status: z
@@ -114,6 +128,27 @@ export const productRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
       return productService.updateProduct(ctx.user.id, id, data);
+    }),
+
+  updateVariantStocks: sellerProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        productId: z.string().uuid(),
+        variants: z.array(
+          z.object({
+            id: z.string().uuid(),
+            quantity: z.number().int().min(0),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      return productService.updateVariantStocks(
+        ctx.user.id,
+        input.productId,
+        input.variants
+      );
     }),
 
   delete: sellerProcedure

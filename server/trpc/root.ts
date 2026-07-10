@@ -7,6 +7,9 @@ import { adminRouter } from "@/server/trpc/routers/admin";
 import { aiRouter } from "@/server/trpc/routers/ai";
 import { storeRouter } from "@/server/trpc/routers/store";
 import { messageRouter } from "@/server/trpc/routers/message";
+import { locationRouter } from "@/server/trpc/routers/location";
+import { wishlistRouter } from "@/server/trpc/routers/wishlist";
+import { reviewRouter } from "@/server/trpc/routers/review";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -17,6 +20,10 @@ export const appRouter = createTRPCRouter({
   store: storeRouter,
   ai: aiRouter,
   message: messageRouter,
+  location: locationRouter,
+  wishlist: wishlistRouter,
+  review: reviewRouter,
 });
+
 
 export type AppRouter = typeof appRouter;
