@@ -54,9 +54,12 @@ export const wishlistRouter = createTRPCRouter({
       wishlistService.removeProductFromWishlist({
         userId: ctx.user.id,
         productId: input.productId,
+        // If wishlistId is provided, remove from that specific wishlist.
+        // Otherwise, service will remove from the user's default wishlist.
         wishlistId: input.wishlistId,
       })
     ),
+
 
   toggleDefault: protectedProcedure
     .use(withErrorHandling)

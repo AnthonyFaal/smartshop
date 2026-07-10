@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**.smartshop.gh" },
       { protocol: "http", hostname: "localhost" },
     ],
+    
   },
   experimental: {
     serverActions: {

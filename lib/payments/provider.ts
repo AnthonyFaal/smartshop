@@ -41,9 +41,7 @@ export interface PaymentProvider {
 class MockPaymentProvider implements PaymentProvider {
   name = "mock";
 
-  async initiate(
-    input: InitiatePaymentInput
-  ): Promise<InitiatePaymentResult> {
+  async initiate(input: InitiatePaymentInput): Promise<InitiatePaymentResult> {
     return {
       providerRef: `mock_${input.orderId}_${Date.now()}`,
       status: "COMPLETED",
@@ -52,7 +50,8 @@ class MockPaymentProvider implements PaymentProvider {
   }
 
   async verifyWebhook(
-    payload: string
+    payload: string,
+    _signature: string
   ): Promise<PaymentWebhookPayload> {
     const data = JSON.parse(payload) as PaymentWebhookPayload;
     return data;
@@ -63,8 +62,11 @@ class MockPaymentProvider implements PaymentProvider {
   }
 }
 
+import { PaystackPaymentProvider } from "@/lib/payments/paystack";
+
 const providers: Record<string, PaymentProvider> = {
   mock: new MockPaymentProvider(),
+  paystack: new PaystackPaymentProvider(),
 };
 
 export function getPaymentProvider(name?: string): PaymentProvider {
@@ -82,3 +84,4 @@ export function registerPaymentProvider(
 ): void {
   providers[name] = provider;
 }
+

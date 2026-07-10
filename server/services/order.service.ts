@@ -16,10 +16,18 @@ export async function createOrderFromCart(
       postalCode?: string;
       country: string;
     };
+    fulfillmentLocationId?: string;
     paymentMethod: PaymentMethod;
     notes?: string;
   }
-) {
+): Promise<{
+  orders: {
+    id: string;
+    orderNumber: string;
+    sellerId: string;
+  }[];
+  paystackRedirectUrl?: string;
+}> {
   const cart = await prisma.cart.findUnique({
     where: { userId: buyerId },
     include: {
@@ -37,11 +45,7 @@ export async function createOrderFromCart(
     throw Errors.badRequest("Cart is empty");
   }
 
-  const storeGroups = new Map<
-    string,
-    (typeof cart.items)[number][]
-  >();
-
+  const storeGroups = new Map<string, (typeof cart.items)[number][]>();
   for (const item of cart.items) {
     const storeId = item.product.storeId;
     const group = storeGroups.get(storeId) ?? [];
@@ -49,9 +53,38 @@ export async function createOrderFromCart(
     storeGroups.set(storeId, group);
   }
 
-  const orders = [];
+  // Small marketplace/toll fee on subtotal (reasonable default 2.5%)
+  const feePercent = Number(process.env.ORDER_FEE_PERCENT ?? 0.025);
 
-  for (const [storeId, items] of storeGroups) {
+  // optional fulfillment location used for delivery/pickup
+  const fulfillmentLocation = input.fulfillmentLocationId
+    ? await prisma.location.findUnique({
+        where: { id: input.fulfillmentLocationId },
+        select: { id: true, name: true, type: true, slug: true },
+      })
+    : null;
+
+  if (input.fulfillmentLocationId && !fulfillmentLocation) {
+    throw Errors.badRequest("Invalid fulfillment location");
+  }
+
+  const shippingAddressWithFulfillment = {
+    ...input.shippingAddress,
+    fulfillmentLocationId: fulfillmentLocation?.id ?? null,
+    fulfillmentLocationName: fulfillmentLocation?.name ?? null,
+    fulfillmentLocationType: fulfillmentLocation?.type ?? null,
+    fulfillmentLocationSlug: fulfillmentLocation?.slug ?? null,
+  };
+
+  const orders: {
+    id: string;
+    orderNumber: string;
+    sellerId: string;
+  }[] = [];
+
+  let paystackRedirectUrl: string | undefined;
+
+  for (const [_storeId, items] of storeGroups) {
     for (const item of items) {
       if (item.product.stock < item.quantity) {
         throw Errors.badRequest(
@@ -73,16 +106,21 @@ export async function createOrderFromCart(
       new Prisma.Decimal(0)
     );
 
-    const order = await prisma.$transaction(async (tx) => {
-      const created = await tx.order.create({
+    // toll fee applied on subtotal
+    const fee = subtotal.mul(new Prisma.Decimal(feePercent));
+    const total = subtotal.add(fee);
+
+    const created = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.create({
         data: {
           orderNumber: generateOrderNumber(),
           buyerId,
           sellerId: items[0].product.sellerId,
-          storeId,
+          storeId: items[0].product.storeId,
           subtotal,
-          total: subtotal,
-          shippingAddress: input.shippingAddress,
+          tax: fee,
+          total,
+          shippingAddress: shippingAddressWithFulfillment,
           notes: input.notes,
           items: {
             create: items.map((item) => ({
@@ -118,53 +156,70 @@ export async function createOrderFromCart(
         select: { email: true, phone: true },
       });
 
+      const isPaystackPayment = ["MOBILE_MONEY", "CARD"].includes(
+        input.paymentMethod
+      );
+
       const paymentProvider = getPaymentProvider();
-      const paymentResult = await paymentProvider.initiate({
-        orderId: created.id,
-        amount: Number(subtotal),
-        currency: "GHS",
-        method: input.paymentMethod,
-        customerEmail: buyer?.email ?? "",
-        customerPhone: buyer?.phone ?? undefined,
-      });
+      const paymentResult = isPaystackPayment
+        ? await paymentProvider.initiate({
+            orderId: order.id,
+            amount: Number(total),
+            currency: "GHS",
+            method: input.paymentMethod,
+            customerEmail: buyer?.email ?? "",
+            customerPhone: buyer?.phone ?? undefined,
+            metadata: {
+              feePercent: String(feePercent),
+              fee: String(fee),
+            },
+          })
+        : null;
 
       await tx.payment.create({
         data: {
-          orderId: created.id,
+          orderId: order.id,
           userId: buyerId,
-          amount: subtotal,
+          amount: total,
           method: input.paymentMethod,
-          status: paymentResult.status,
-          providerRef: paymentResult.providerRef,
-          providerData:
-            paymentResult.providerData as Prisma.InputJsonValue | undefined,
-
-          ...(paymentResult.status === "COMPLETED" && {
+          status: paymentResult?.status ?? "PENDING",
+          providerRef: paymentResult?.providerRef ?? undefined,
+          providerData: paymentResult?.providerData as
+            | Prisma.InputJsonValue
+            | undefined,
+          ...(paymentResult?.status === "COMPLETED" && {
             paidAt: new Date(),
-            // Escrow: mark funds as held once payment is captured.
             escrowHeldAt: new Date(),
           }),
         },
       });
 
-      if (paymentResult.status === "COMPLETED") {
+      if (paymentResult?.status === "COMPLETED") {
         await tx.order.update({
-          where: { id: created.id },
+          where: { id: order.id },
           data: { status: "CONFIRMED" },
         });
       }
 
-      return created;
+      return { order, paymentResult };
     });
 
-    orders.push(order);
+    orders.push({
+      id: created.order.id,
+      orderNumber: created.order.orderNumber,
+      sellerId: created.order.sellerId,
+    });
+
+    if (!paystackRedirectUrl && created.paymentResult?.redirectUrl) {
+      paystackRedirectUrl = created.paymentResult.redirectUrl;
+    }
 
     await createNotification({
-      userId: order.sellerId,
+      userId: created.order.sellerId,
       type: "ORDER",
       title: "New Order Received",
-      body: `Order ${order.orderNumber} has been placed.`,
-      data: { orderId: order.id },
+      body: `Order ${created.order.orderNumber} has been placed.`,
+      data: { orderId: created.order.id },
       channels: ["IN_APP", "EMAIL"],
     });
   }
@@ -179,7 +234,7 @@ export async function createOrderFromCart(
     data: { orderIds: orders.map((o) => o.id) },
   });
 
-  return orders;
+  return { orders, paystackRedirectUrl };
 }
 
 export async function updateOrderStatus(
@@ -214,7 +269,6 @@ export async function updateOrderStatus(
     );
   }
 
-  // If we're completing the order, release escrow for all payments of this order.
   const updated = await prisma.$transaction(async (tx) => {
     const o = await tx.order.update({
       where: { id: orderId },
@@ -362,3 +416,4 @@ export async function listSellerCustomers(sellerId: string) {
     (a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime()
   );
 }
+

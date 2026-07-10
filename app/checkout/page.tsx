@@ -24,6 +24,7 @@ const checkoutSchema = z.object({
   city: z.string().min(1, "City is required"),
   region: z.string().min(1, "Region is required"),
   postalCode: z.string().optional(),
+  fulfillmentLocationId: z.string().uuid().optional(),
   paymentMethod: z.enum([
     "MOBILE_MONEY",
     "CARD",
@@ -40,13 +41,27 @@ export default function CheckoutPage() {
   const utils = trpc.useUtils();
   const { user } = useAuthUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { data: cart, isLoading: cartLoading } = trpc.cart.get.useQuery(undefined, {
-    enabled: !!user,
-  });
+
+  const { data: cart, isLoading: cartLoading } = trpc.cart.get.useQuery(
+    undefined,
+    {
+      enabled: !!user,
+    }
+  );
+
+  const feePercent = Number(
+    process.env.NEXT_PUBLIC_ORDER_FEE_PERCENT ?? 0.025
+  );
+
+  const { data: fulfillmentLocations } = trpc.location.search.useQuery(
+    { query: "a", types: ["CITY", "TOWN", "AREA", "DISTRICT", "SUBURB"], limit: 20 },
+    { enabled: !!user }
+  );
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<CheckoutForm>({
     resolver: zodResolver(checkoutSchema),
@@ -58,8 +73,15 @@ export default function CheckoutPage() {
   });
 
   const createOrder = trpc.order.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       await utils.cart.get.invalidate();
+
+      if (data?.paystackRedirectUrl) {
+        // Redirect user to Paystack authorization
+        window.location.href = data.paystackRedirectUrl;
+        return;
+      }
+
       toast.success("Order placed successfully!");
       router.push("/orders");
     },
@@ -75,6 +97,10 @@ export default function CheckoutPage() {
       0
     ) ?? 0;
 
+  const fee = subtotal * feePercent;
+  const total = subtotal + fee;
+
+  const selectedPaymentMethod = watch("paymentMethod");
   const onSubmit = (data: CheckoutForm) => {
     if (!cart?.items.length) {
       toast.error("Your cart is empty");
@@ -131,9 +157,27 @@ export default function CheckoutPage() {
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Shipping Address</CardTitle>
+                  <CardTitle>Delivery Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="fulfillmentLocationId">
+                      Drop-off / Pick-up Point
+                    </Label>
+                    <select
+                      id="fulfillmentLocationId"
+                      {...register("fulfillmentLocationId")}
+                      className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+                      defaultValue={fulfillmentLocations?.[0]?.id ?? undefined}
+                    >
+                      <option value="">Select a location</option>
+                      {fulfillmentLocations?.map((loc) => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="line1">Address line 1</Label>
                     <Input id="line1" {...register("line1")} />
@@ -223,8 +267,16 @@ export default function CheckoutPage() {
                 ))}
                 <div className="border-t border-zinc-200 pt-4">
                   <div className="flex justify-between font-semibold">
-                    <span>Total</span>
+                    <span>Subtotal</span>
                     <span>{formatCurrency(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-zinc-600">
+                    <span>Marketplace Fee ({(feePercent * 100).toFixed(2)}%)</span>
+                    <span>{formatCurrency(fee)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-zinc-200 pt-3 font-semibold">
+                    <span>Total</span>
+                    <span>{formatCurrency(total)}</span>
                   </div>
                 </div>
                 <Button
@@ -234,7 +286,10 @@ export default function CheckoutPage() {
                 >
                   {isSubmitting || createOrder.isPending
                     ? "Processing..."
-                    : `Pay ${formatCurrency(subtotal)}`}
+                    : selectedPaymentMethod === "CASH_ON_DELIVERY" ||
+                        selectedPaymentMethod === "BANK_TRANSFER"
+                      ? "Place Order"
+                      : `Pay ${formatCurrency(total)}`}
                 </Button>
               </CardContent>
             </Card>

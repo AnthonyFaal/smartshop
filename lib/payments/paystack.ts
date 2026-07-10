@@ -1,0 +1,120 @@
+import type { PaymentStatus } from "@prisma/client";
+
+import type {
+  InitiatePaymentInput,
+  InitiatePaymentResult,
+  PaymentProvider,
+  PaymentWebhookPayload,
+} from "@/lib/payments/provider";
+
+const PAYSTACK_CURRENCY = "GHS";
+
+function mapPaymentStatus(status: string): PaymentStatus {
+  // Paystack uses: success/failed
+  if (status === "success") return "COMPLETED";
+  if (status === "failed") return "FAILED";
+  return "PENDING";
+}
+
+export class PaystackPaymentProvider implements PaymentProvider {
+  name = "paystack";
+
+  async initiate(input: InitiatePaymentInput): Promise<InitiatePaymentResult> {
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    if (!secretKey) throw new Error("Missing PAYSTACK_SECRET_KEY");
+
+    // Paystack amount is in kobo (integer)
+    const amountKobo = Math.round(input.amount * 100);
+
+    const res = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: amountKobo,
+        email: input.customerEmail,
+        reference: `SS_${input.orderId}_${Date.now()}`,
+        callback_url:
+          process.env.PAYSTACK_CALLBACK_URL ??
+          `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/checkout`,
+        metadata: input.metadata,
+      }),
+    });
+
+    const body = (await res.json()) as {
+      status: boolean;
+      message?: string;
+      data?: {
+        reference?: string;
+        authorization?: { url?: string };
+      };
+    };
+
+    if (!res.ok || !body?.status || !body?.data?.reference) {
+      throw new Error(body?.message ?? "Paystack initialization failed");
+    }
+
+    const providerRef = body.data.reference;
+
+    return {
+      providerRef,
+      status: "PENDING",
+      redirectUrl: body.data.authorization?.url,
+      providerData: {
+        raw: body.data,
+      },
+    };
+  }
+
+  async verifyWebhook(
+    payload: string,
+    _signature: string
+  ): Promise<PaymentWebhookPayload> {
+    // Webhook verification is handled in the route handler.
+    const data = JSON.parse(payload) as PaymentWebhookPayload & {
+      event?: string;
+      data?: any;
+    };
+
+    return {
+      providerRef: (data as any)?.data?.reference ?? data.providerRef,
+      status: mapPaymentStatus((data as any)?.data?.status) as any,
+      amount: (data as any)?.data?.amount ?? data.amount,
+      currency: (data as any)?.data?.currency ?? PAYSTACK_CURRENCY,
+      metadata: (data as any)?.data?.metadata,
+    };
+  }
+
+  async refund(
+    providerRef: string,
+    amount: number
+  ): Promise<{ success: boolean; refundRef?: string }> {
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+    if (!secretKey) throw new Error("Missing PAYSTACK_SECRET_KEY");
+
+    const amountKobo = Math.round(amount * 100);
+
+    const res = await fetch(
+      `https://api.paystack.co/refund/${encodeURIComponent(providerRef)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${secretKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: amountKobo,
+        }),
+      }
+    );
+
+    const body = await res.json();
+    const success = !!body?.status;
+    const refundRef = body?.data?.reference;
+
+    return { success, refundRef };
+  }
+}
+

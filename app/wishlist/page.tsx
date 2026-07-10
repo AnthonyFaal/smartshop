@@ -42,10 +42,12 @@ export default function WishlistPage() {
 
   const removeMutation = trpc.wishlist.remove.useMutation({
     onSuccess: async () => {
+      // Refetch the exact wishlist that this page is currently reading.
       await itemsQuery.refetch();
       await defaultWishlist.refetch();
     },
   });
+
 
   const items = itemsQuery.data ?? [];
 
@@ -115,8 +117,12 @@ export default function WishlistPage() {
                     className="shrink-0"
                     disabled={removeMutation.isPending}
                     onClick={() =>
-                      removeMutation.mutate({ productId: item.productId })
+                      removeMutation.mutate({
+                        productId: item.productId,
+                        wishlistId: defaultWishlist.data?.id,
+                      })
                     }
+
                     aria-label="Remove from wishlist"
                   >
                     <Trash2 className="h-4 w-4" />
