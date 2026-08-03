@@ -18,7 +18,7 @@ export const reviewRouter = createTRPCRouter({
         limit: z.number().int().min(1).max(50).optional(),
       })
     )
-    .query(async ({ input, ctx }) =>
+    .query(async ({ input}) =>
       reviewService.listProductReviews({
         productId: input.productId,
         cursor: input.cursor,
@@ -38,7 +38,15 @@ export const reviewRouter = createTRPCRouter({
     .input(
       z.object({
         productId: z.string().uuid(),
-        rating: z.number().int().min(1).max(5),
+
+        // Ratings are stored as decimals in DB; UI uses 0.5-step selection.
+        // Accept only 0.5 increments to avoid accidental precision issues.
+        rating: z
+          .number()
+          .min(0.5)
+          .max(5)
+          .refine((n) => Math.round(n * 2) === n * 2, "Rating must be in 0.5 steps"),
+
         title: z.string().trim().min(2).max(200).optional().nullable(),
         content: z.string().trim().min(3).max(2000).optional().nullable(),
       })

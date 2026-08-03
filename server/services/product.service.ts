@@ -270,8 +270,33 @@ async function fetchProductBySlug(slug: string) {
   });
 }
 
+type ProductWithRelations = Prisma.ProductGetPayload<{
+  include: {
+    store: {
+      select: {
+        id: true;
+        name: true;
+        slug: true;
+        logoUrl: true;
+        verificationStatus: true;
+        rating: true;
+        reviewCount: true;
+        ownerId: true;
+      };
+    };
+    category: { select: { id: true; name: true; slug: true } };
+    seller: {
+      select: {
+        id: true;
+        verificationLevel: true;
+        trustScore: { select: { score: true } };
+      };
+    };
+  };
+}>;
+
 async function buildProductWithVariants(args: {
-  product: any; // Prisma Product with includes above
+  product: ProductWithRelations;
   productId: string;
 }) {
   const { product, productId } = args;
@@ -615,7 +640,7 @@ export async function updateVariantStocks(
   await prisma.productVariant.updateMany({
     // Prisma updateMany doesn't support per-row values, so do sequential updates.
     // Kept small since inventory edits are per-variant.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+     
     where: { id: { in: providedIds } },
     data: { quantity: 0 },
   });

@@ -16,7 +16,7 @@ import {
   getPlanOrder,
   normalizeSubscriptionOffering,
 } from "@/lib/config/subscriptions";
-import { OtpPurpose, PaymentMethod, Prisma, SubscriptionPlan } from "@prisma/client";
+import { OtpPurpose, PaymentMethod,  SubscriptionPlan } from "@prisma/client";
 
 async function syncSubscriptionOfferings() {
   const defaults = getDefaultSubscriptionOfferings();

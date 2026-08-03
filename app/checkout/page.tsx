@@ -8,8 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
+import { PageShell } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,18 +18,14 @@ import { formatCurrency } from "@/lib/utils/format";
 import { useAuthUser } from "@/components/providers/auth-provider";
 
 const checkoutSchema = z.object({
-  line1: z.string().min(1, "Address is required"),
+  // Tarkwa-only defaults; shipping address line inputs are not shown in UI.
+  line1: z.string().min(1),
   line2: z.string().optional(),
-  city: z.string().min(1, "City is required"),
-  region: z.string().min(1, "Region is required"),
+  city: z.string().min(1),
+  region: z.string().min(1),
   postalCode: z.string().optional(),
   fulfillmentLocationId: z.string().uuid().optional(),
-  paymentMethod: z.enum([
-    "MOBILE_MONEY",
-    "CARD",
-    "BANK_TRANSFER",
-    "CASH_ON_DELIVERY",
-  ]),
+  paymentMethod: z.enum(["MOBILE_MONEY", "CARD"]),
   notes: z.string().optional(),
 });
 
@@ -54,7 +49,7 @@ export default function CheckoutPage() {
   );
 
   const { data: fulfillmentLocations } = trpc.location.search.useQuery(
-    { query: "a", types: ["CITY", "TOWN", "AREA", "DISTRICT", "SUBURB"], limit: 20 },
+    { query: "Tarkwa", types: ["CITY", "TOWN", "AREA", "DISTRICT", "SUBURB"], limit: 20 },
     { enabled: !!user }
   );
 
@@ -66,6 +61,9 @@ export default function CheckoutPage() {
   } = useForm<CheckoutForm>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
+      // Fixed Tarkwa defaults (non-editable in UI)
+      line1: "Tarkwa",
+      line2: "",
       region: "Western Region",
       city: "Tarkwa",
       paymentMethod: "MOBILE_MONEY",
@@ -117,8 +115,7 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div className="flex min-h-full flex-col">
-      <Header />
+    <PageShell showVerificationBanner>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Checkout</h1>
@@ -162,7 +159,7 @@ export default function CheckoutPage() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="fulfillmentLocationId">
-                      Drop-off / Pick-up Point
+                      Drop-off
                     </Label>
                     <select
                       id="fulfillmentLocationId"
@@ -178,33 +175,21 @@ export default function CheckoutPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="line1">Address line 1</Label>
-                    <Input id="line1" {...register("line1")} />
-                    {errors.line1 && (
-                      <p className="text-sm text-red-600">{errors.line1.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="line2">Address line 2</Label>
-                    <Input id="line2" {...register("line2")} />
-                  </div>
+
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="city">City</Label>
-                      <Input id="city" {...register("city")} />
-                      {errors.city && (
-                        <p className="text-sm text-red-600">{errors.city.message}</p>
-                      )}
+                      <Label>City</Label>
+                      <Input value="Tarkwa" readOnly />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="region">Region</Label>
-                      <Input id="region" {...register("region")} />
-                      {errors.region && (
-                        <p className="text-sm text-red-600">{errors.region.message}</p>
-                      )}
+                      <Label>Region</Label>
+                      <Input value="Western Region" readOnly />
                     </div>
                   </div>
+
+                  {/* Hidden fields so backend input schema stays satisfied */}
+                  <input type="hidden" {...register("line1")} value="Tarkwa" />
+                  <input type="hidden" {...register("line2")} value="" />
                 </CardContent>
               </Card>
 
@@ -216,7 +201,6 @@ export default function CheckoutPage() {
                   {[
                     { value: "MOBILE_MONEY", label: "Mobile Money (MTN/Vodafone)" },
                     { value: "CARD", label: "Debit/Credit Card" },
-                    { value: "CASH_ON_DELIVERY", label: "Cash on Delivery" },
                   ].map((method) => (
                     <label
                       key={method.value}
@@ -286,17 +270,13 @@ export default function CheckoutPage() {
                 >
                   {isSubmitting || createOrder.isPending
                     ? "Processing..."
-                    : selectedPaymentMethod === "CASH_ON_DELIVERY" ||
-                        selectedPaymentMethod === "BANK_TRANSFER"
-                      ? "Place Order"
-                      : `Pay ${formatCurrency(total)}`}
+                    : `Pay ${formatCurrency(total)}`}
                 </Button>
               </CardContent>
             </Card>
           </form>
         )}
       </main>
-      <Footer />
-    </div>
+    </PageShell>
   );
 }

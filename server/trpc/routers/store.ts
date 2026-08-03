@@ -106,10 +106,7 @@ export const storeRouter = createTRPCRouter({
         }
       }
 
-      // Ghana-only flow: location is always required (validated by zod).
-      // Keep additional checks minimal to avoid conflicting rules.
-
-      // Enforce explicit Ghana country for safety.
+      
       if ((input.country ?? "Ghana") !== "Ghana") {
         throw Errors.badRequest("Only Ghana is supported for store location for now.");
       }
@@ -117,12 +114,6 @@ export const storeRouter = createTRPCRouter({
 
       const slug = await createUniqueStoreSlug(input.name);
 
-      // Resolve canonical locationId during migration window.
-      // Strategy:
-      // - If caller provides locationId, trust it.
-      // - Else try to map legacy city/region to a first-class Location:
-      //   - Prefer exact name match for CITY or TOWN under the provided region
-      //   - Fallback to city name-only match
       let resolvedLocationId: string | undefined = input.locationId;
 
       if (!resolvedLocationId) {
@@ -130,7 +121,7 @@ export const storeRouter = createTRPCRouter({
         const legacyCity = input.city?.trim() || undefined;
 
         if (legacyRegion && legacyCity) {
-          const match = await (prisma as any).location.findFirst({
+          const match = await prisma.location.findFirst({
             where: {
               region: legacyRegion,
               name: legacyCity,
@@ -143,7 +134,7 @@ export const storeRouter = createTRPCRouter({
         }
 
         if (!resolvedLocationId && legacyCity) {
-          const match = await (prisma as any).location.findFirst({
+          const match = await prisma.location.findFirst({
             where: {
               name: legacyCity,
             },

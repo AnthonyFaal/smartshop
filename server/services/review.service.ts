@@ -85,6 +85,31 @@ function computeVerifiedFlag(_args: {
   return false;
 }
 
+function normalizeRatingTo05Steps(rating: number) {
+  // Snap to 0.5 increments (e.g. 3.26 -> 3.5) after router validation.
+  const snapped = Math.round(rating * 2) / 2;
+  // Keep within [0.5, 5]
+  return Math.min(5, Math.max(0.5, snapped));
+}
+
+function decimalToNumber(value: unknown): number {
+  if (value == null) return 0;
+
+  // Prisma Decimal typically supports `toNumber()` (and `toString()`).
+  if (typeof value === "object" && "toNumber" in (value as any)) {
+    try {
+      const n = (value as any).toNumber();
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  const asString = String(value);
+  const parsed = Number(asString);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export async function upsertMyReviewForProduct(params: {
   userId: string;
   productId: string;
@@ -92,7 +117,8 @@ export async function upsertMyReviewForProduct(params: {
   title?: string | null;
   content?: string | null;
 }) {
-  const { userId, productId, rating, title, content } = params;
+  const { userId, productId, title, content } = params;
+  const rating = normalizeRatingTo05Steps(params.rating);
 
   const product = await prisma.product.findFirst({
     where: { id: productId, deletedAt: null },
@@ -131,7 +157,7 @@ export async function upsertMyReviewForProduct(params: {
     await prisma.product.update({
       where: { id: productId },
       data: {
-        rating: (agg._avg.rating ?? 0) as any,
+        rating: decimalToNumber(agg._avg.rating),
         reviewCount: agg._count.id,
       },
     });
@@ -162,7 +188,7 @@ export async function upsertMyReviewForProduct(params: {
   await prisma.product.update({
     where: { id: productId },
     data: {
-      rating: (agg._avg.rating ?? 0) as any,
+      rating: decimalToNumber(agg._avg.rating),
       reviewCount: agg._count.id,
     },
   });
@@ -192,7 +218,7 @@ export async function deleteMyReview(userId: string, productId: string) {
   await prisma.product.update({
     where: { id: productId },
     data: {
-      rating: (agg._avg.rating ?? 0) as any,
+      rating: decimalToNumber(agg._avg.rating),
       reviewCount: agg._count.id,
     },
   });

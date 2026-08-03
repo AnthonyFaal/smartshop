@@ -453,7 +453,9 @@ function ReviewsSection({ productId }: { productId: string }) {
 
   const [title, setTitle] = useState<string>("");
   const [content, setContent] = useState<string>("");
-  const [rating, setRating] = useState<number>(myReviewQuery.data?.rating ?? 0);
+  const [rating, setRating] = useState<number>(
+    Number(myReviewQuery.data?.rating ?? 0)
+  );
 
   useEffect(() => {
     setTitle(myReviewQuery.data?.title ?? "");
@@ -482,8 +484,12 @@ function ReviewsSection({ productId }: { productId: string }) {
     onError: (e) => toast.error(e.message),
   });
 
-  const canSubmit = !!user && rating >= 1 && rating <= 5;
-
+  const canSubmit =
+  !!user &&
+  rating >= 0.5 &&
+  rating <= 5 &&
+  rating % 0.5 === 0;
+  
   return (
     <div className="space-y-6 pt-2">
       <div className="space-y-2">
@@ -698,7 +704,7 @@ function ReviewsSection({ productId }: { productId: string }) {
               <div className="flex items-center gap-2">
                 <StarRating value={r.rating} />
                 <span className="text-sm font-medium text-zinc-900">
-                  {r.rating} / 5
+                  {Number(r.rating).toFixed(1)} / 5
                 </span>
                 {r.isVerified && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">

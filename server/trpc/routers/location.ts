@@ -5,6 +5,7 @@ import {
   withErrorHandling,
 } from "@/server/trpc/init";
 import { prisma } from "@/lib/db/prisma";
+import type { Prisma } from "@prisma/client";
 
 export const locationRouter = createTRPCRouter({
   search: publicProcedure
@@ -22,7 +23,7 @@ export const locationRouter = createTRPCRouter({
     .query(async ({ input }) => {
       const { query, limit, types, country } = input;
 
-      const where = {
+      const where: Prisma.LocationWhereInput = {
         country: country ?? "Ghana",
         name: { contains: query, mode: "insensitive" },
         ...(types && types.length > 0 ? { type: { in: types } } : {}),
@@ -31,7 +32,7 @@ export const locationRouter = createTRPCRouter({
       // Prisma expects `mode` to be a specific query-mode literal type.
       const results = await prisma.location.findMany({
         where: {
-          ...(where as any),
+          ...where,
           name: { contains: query, mode: "insensitive" as const },
         },
         take: limit,

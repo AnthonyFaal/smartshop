@@ -123,10 +123,13 @@ export async function addProductToWishlist(params: {
     });
 
     return { added: true, wishlistItemId: created.id };
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Unique constraint => already exists
-    if (String(e?.code) === "P2002") {
-      return { added: false, wishlistItemId: null };
+    if (typeof e === "object" && e !== null) {
+      const maybeCode = (e as { code?: unknown }).code;
+      if (maybeCode === "P2002") {
+        return { added: false, wishlistItemId: null };
+      }
     }
     throw e;
   }

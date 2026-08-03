@@ -11,25 +11,53 @@ type StarRatingProps = {
 };
 
 export function StarRating({ value, className, size = 16 }: StarRatingProps) {
-  const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const v =
+    typeof value === "number" && Number.isFinite(value)
+      ? value
+      : 0;
 
-  // Since backend stores integer per review, we show average using simple fill threshold.
-  // This avoids half-star complexity while still being visually meaningful.
   return (
-    <div className={cn("flex items-center gap-0.5", className)} aria-label="Rating">
+    <div
+      className={cn("flex items-center gap-0.5", className)}
+      aria-label={`${v} out of 5 stars`}
+    >
       {Array.from({ length: 5 }).map((_, idx) => {
-        const starNumber = idx + 1; // 1..5
-        const isFilled = v >= starNumber - 0.25; // slight threshold for averages
+        const starValue = idx + 1;
+
+        const full = v >= starValue;
+        const half = v >= starValue - 0.5 && v < starValue;
+
         return (
-          <Star
+          <div
             key={idx}
-            className={cn(
-              "transition-colors",
-              isFilled ? "fill-amber-500 text-amber-500" : "text-amber-300"
-            )}
+            className="relative"
             style={{ width: size, height: size }}
-            aria-hidden
-          />
+          >
+            {/* Empty star */}
+            <Star
+              className="absolute text-amber-300"
+              style={{
+                width: size,
+                height: size,
+              }}
+              aria-hidden
+            />
+
+            {/* Filled star */}
+            {(full || half) && (
+              <Star
+                className="absolute fill-amber-500 text-amber-500"
+                style={{
+                  width: size,
+                  height: size,
+                  clipPath: half
+                    ? "inset(0 50% 0 0)"
+                    : undefined,
+                }}
+                aria-hidden
+              />
+            )}
+          </div>
         );
       })}
     </div>
@@ -49,9 +77,10 @@ export function StarPicker({
   onChange,
   disabled,
   className,
-  size = 18,
+  size = 22,
 }: StarPickerProps) {
-  const current = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  const current =
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
 
   return (
     <div
@@ -60,33 +89,65 @@ export function StarPicker({
       aria-label="Select rating"
     >
       {Array.from({ length: 5 }).map((_, idx) => {
-        const starNumber = idx + 1; // 1..5
-        const selected = starNumber <= current;
+        const starValue = idx + 1;
+
+        const full = current >= starValue;
+        const half = current >= starValue - 0.5 && current < starValue;
 
         return (
-          <button
+          <div
             key={idx}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            disabled={disabled}
-            className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
-            onClick={() => {
-              if (disabled) return;
-              onChange(starNumber);
-            }}
+            className="relative cursor-pointer"
+            style={{ width: size, height: size }}
           >
+            {/* Left half */}
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label={`${starValue - 0.5} stars`}
+              className="absolute left-0 top-0 z-10 h-full w-1/2"
+              onClick={() => onChange(starValue - 0.5)}
+            />
+
+            {/* Right half */}
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label={`${starValue} stars`}
+              className="absolute right-0 top-0 z-10 h-full w-1/2"
+              onClick={() => onChange(starValue)}
+            />
+
             <Star
               className={cn(
-                "transition-colors",
-                selected
+                "absolute inset-0 transition-colors",
+                full
+                  ? "fill-amber-500 text-amber-500"
+                  : half
                   ? "fill-amber-500 text-amber-500"
                   : "text-amber-300"
               )}
-              style={{ width: size, height: size }}
+              style={{
+                width: size,
+                height: size,
+                clipPath: half
+                  ? "inset(0 50% 0 0)"
+                  : undefined,
+              }}
               aria-hidden
             />
-          </button>
+
+            {half && (
+              <Star
+                className="absolute inset-0 text-amber-300"
+                style={{
+                  width: size,
+                  height: size,
+                }}
+                aria-hidden
+              />
+            )}
+          </div>
         );
       })}
     </div>

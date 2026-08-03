@@ -450,12 +450,13 @@ model SubscriptionOffering {
 }
 
 model Review {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  productId  String?   @map("product_id") @db.Uuid
-  storeId    String?   @map("store_id") @db.Uuid
-  orderId    String?   @map("order_id") @db.Uuid
-  rating     Int
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String  @map("user_id") @db.Uuid
+  productId String? @map("product_id") @db.Uuid
+  storeId   String? @map("store_id") @db.Uuid
+  orderId   String? @map("order_id") @db.Uuid
+  rating    Decimal @db.Decimal(3, 2)
+
   title      String?   @db.VarChar(200)
   content    String?
   isVerified Boolean   @default(false) @map("is_verified")

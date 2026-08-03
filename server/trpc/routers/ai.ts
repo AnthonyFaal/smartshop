@@ -86,12 +86,108 @@ export const aiRouter = createTRPCRouter({
     .input(z.object({ query: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       await checkAiQuota(ctx.user.id);
-      const result = await complete(
-        getSystemPrompt("SMART_SEARCH"),
-        `Parse this search query for a Ghana marketplace: "${input.query}". Return JSON with: keywords, category, minPrice, maxPrice, sortBy.`
-      );
+
+      // Provide allowed category names to the model (model still cannot access DB directly).
+      const categories = await prisma.category.findMany({
+        select: { id: true, name: true },
+        orderBy: { sortOrder: "asc" },
+      });
+
+      const allowedCategoryNames = categories.map((c) => c.name);
+
+      const systemPrompt = getSystemPrompt("SMART_SEARCH") + "\n\n" + [
+        "HARD REQUIREMENTS (anti-hallucination):",
+        "- Return JSON ONLY. No markdown, no backticks, no extra keys.",
+        "- Do NOT invent categories. If the query does not clearly match one of the allowed category names, set category to null.",
+        "- Allowed sortBy values: createdAt | price | rating | soldCount. If not applicable set sortBy to null.",
+        "- Allowed sortOrder values: asc | desc. If not applicable set sortOrder to null.",
+        "- minPrice/maxPrice are either numbers (GHS) or null. Never return strings for prices.",
+        "",
+        "Output JSON schema:",
+        "{",
+        '  "keywords": string | string[],',
+        '  "category": string | null,',
+        '  "minPrice": number | null,',
+        '  "maxPrice": number | null,',
+        '  "sortBy": "createdAt" | "price" | "rating" | "soldCount" | null,',
+        '  "sortOrder": "asc" | "desc" | null',
+        "}",
+        "",
+        "Allowed category names:",
+        allowedCategoryNames.length ? allowedCategoryNames.map(String).join(", ") : "(none)",
+      ].join("\n");
+
+      const userPrompt = [
+        `Ghana marketplace product search refinement.`,
+        `User query: "${input.query}"`,
+        "",
+        "Task:",
+        "- Convert the user's intent into structured filters.",
+        "- keywords should be meaningful search terms (e.g., 'iPhone 13', 'wireless earbuds', 'smart watch').",
+        "- If the user asks for 'best rating' choose sortBy='rating' and sortOrder='desc'.",
+        "- If the user asks for 'cheapest' choose sortBy='price' and sortOrder='asc'.",
+        "- If the user asks for 'most popular' or 'best selling' choose sortBy='soldCount' and sortOrder='desc'.",
+      ].join("\n");
+
+      const result = await complete(systemPrompt, userPrompt, { temperature: 0.2 });
+
       await logAiUsage(ctx.user.id, "SMART_SEARCH", result);
-      return { result: result.content };
+
+      // Validate model output to prevent hallucinated/invalid values reaching UI.
+      const SmartSearchOutputSchema = z.object({
+        keywords: z.union([z.string(), z.array(z.string())]),
+        category: z.string().nullable(),
+        minPrice: z.number().nullable(),
+        maxPrice: z.number().nullable(),
+        sortBy: z
+          .enum(["createdAt", "price", "rating", "soldCount"])
+          .nullable(),
+        sortOrder: z.enum(["asc", "desc"]).nullable(),
+      });
+
+      const safeFallback = {
+        keywords: input.query,
+        category: null,
+        minPrice: null,
+        maxPrice: null,
+        sortBy: null,
+        sortOrder: null,
+      };
+
+      try {
+        const cleaned = result.content
+          .trim()
+          .replace(/^```(?:json)?/i, "")
+          .replace(/```$/i, "")
+          .trim();
+
+        const parsed = JSON.parse(cleaned);
+
+        const validated = SmartSearchOutputSchema.parse(parsed);
+
+        // Enforce allowed category names (anti-hallucination).
+        const allowed = new Set(allowedCategoryNames.map((n) => n.toLowerCase()));
+        const nextCategory =
+          validated.category && allowed.has(validated.category.toLowerCase())
+            ? validated.category
+            : null;
+
+        // If sortBy is not price, sortOrder should still be allowed; keep as-is.
+        // UI already maps sortOrder logic based on sortBy; but we still keep values constrained.
+        return {
+          result: JSON.stringify({
+            keywords: validated.keywords,
+            category: nextCategory,
+            minPrice: validated.minPrice,
+            maxPrice: validated.maxPrice,
+            sortBy: validated.sortBy,
+            sortOrder: validated.sortOrder,
+          }),
+        };
+      } catch (err) {
+        // Return a safe JSON shape so UI degrades to keyword search without hallucinated filters.
+        return { result: JSON.stringify(safeFallback) };
+      }
     }),
 
   generateListing: protectedProcedure
