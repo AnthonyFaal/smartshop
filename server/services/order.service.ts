@@ -84,7 +84,7 @@ export async function createOrderFromCart(
 
   let paystackRedirectUrl: string | undefined;
 
-  for (const [_storeId, items] of storeGroups) {
+  for (const items of storeGroups.values()) {
     for (const item of items) {
       if (item.product.stock < item.quantity) {
         throw Errors.badRequest(
@@ -281,17 +281,6 @@ export async function updateOrderStatus(
       },
     });
 
-    if (status === "COMPLETED") {
-      await tx.payment.updateMany({
-        where: {
-          orderId,
-        },
-        data: {
-          refundedAt: new Date(),
-        },
-      });
-    }
-
     return o;
   });
 
@@ -416,4 +405,3 @@ export async function listSellerCustomers(sellerId: string) {
     (a, b) => b.lastOrderAt.getTime() - a.lastOrderAt.getTime()
   );
 }
-

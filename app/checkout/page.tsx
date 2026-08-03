@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { PageShell } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc/client";
@@ -161,10 +162,9 @@ export default function CheckoutPage() {
                     <Label htmlFor="fulfillmentLocationId">
                       Drop-off
                     </Label>
-                    <select
+                    <Select
                       id="fulfillmentLocationId"
                       {...register("fulfillmentLocationId")}
-                      className="h-10 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
                       defaultValue={fulfillmentLocations?.[0]?.id ?? undefined}
                     >
                       <option value="">Select a location</option>
@@ -173,7 +173,7 @@ export default function CheckoutPage() {
                           {loc.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">

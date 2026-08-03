@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, Plus, Store as StoreIcon } from "lucide-react";
 
@@ -24,6 +24,8 @@ type StoreForm = {
 
   // Location (Ghana-only)
   address: string;
+  city: string;
+  region: string;
 
   // Canonical location
   locationId: string;
@@ -41,6 +43,8 @@ const initialForm: StoreForm = {
   bannerUrl: "",
 
   address: "",
+  city: "",
+  region: "",
   locationId: "",
 
   latitude: null,
@@ -91,6 +95,8 @@ export default function SellerStorePage() {
   const storeList = stores ?? [];
   const locationReady =
     form.address.trim().length > 0 &&
+    form.city.trim().length > 0 &&
+    form.region.trim().length > 0 &&
     form.locationId.trim().length > 0 &&
     form.latitude != null &&
     form.longitude != null;
@@ -120,6 +126,10 @@ export default function SellerStorePage() {
         setError("Please select a location.");
         return;
       }
+      if (!form.city.trim() || !form.region.trim()) {
+        setError("Please select a location with a city and region.");
+        return;
+      }
       if (form.latitude == null || form.longitude == null) {
         setError("Location coordinates could not be determined.");
         return;
@@ -131,6 +141,8 @@ export default function SellerStorePage() {
         logoUrl: sanitizeOptionalString(form.logoUrl),
         bannerUrl: sanitizeOptionalString(form.bannerUrl),
         address: form.address.trim(),
+        city: form.city.trim(),
+        region: form.region.trim(),
         locationId: form.locationId.trim(),
         country: "Ghana",
         latitude: form.latitude,
@@ -321,6 +333,8 @@ export default function SellerStorePage() {
                                 setForm((current) => ({
                                   ...current,
                                   locationId: loc.id,
+                                  city: loc.name,
+                                  region: loc.region ?? "",
                                   latitude: loc.latitude ? Number(loc.latitude) : null,
                                   longitude: loc.longitude ? Number(loc.longitude) : null,
                                 }));
@@ -402,7 +416,7 @@ export default function SellerStorePage() {
                               <h2 className="font-medium text-zinc-900">
                                 {store.name}
                               </h2>
-                              {store.verificationStatus? (
+                              {store.verificationStatus === "VERIFIED" ? (
                                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                               ) : null}
                             </div>
@@ -433,6 +447,9 @@ export default function SellerStorePage() {
                             </p>
                           </div>
                         </div>
+                        <Button asChild variant="outline" size="sm" className="mt-4">
+                          <Link href={`/seller/store/settings?storeId=${store.id}`}>Edit settings</Link>
+                        </Button>
                       </div>
                     ))}
                   </div>

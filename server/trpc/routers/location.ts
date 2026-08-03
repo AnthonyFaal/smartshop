@@ -15,7 +15,7 @@ export const locationRouter = createTRPCRouter({
         query: z.string().trim().min(1),
         limit: z.number().int().min(1).max(20).optional().default(10),
         types: z
-          .array(z.enum(["CITY", "TOWN", "AREA", "DISTRICT", "SUBURB", "REGION", "COUNTRY"  ]))
+          .array(z.enum(["CITY", "TOWN", "AREA", "DISTRICT", "SUBURB"]))
           .optional(),
         country: z.string().optional().default("Ghana"),
       })

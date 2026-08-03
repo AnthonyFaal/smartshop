@@ -460,7 +460,7 @@ function ReviewsSection({ productId }: { productId: string }) {
   useEffect(() => {
     setTitle(myReviewQuery.data?.title ?? "");
     setContent(myReviewQuery.data?.content ?? "");
-    setRating(myReviewQuery.data?.rating ?? 0);
+    setRating(Number(myReviewQuery.data?.rating ?? 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myReviewQuery.data?.id]);
 
@@ -702,7 +702,7 @@ function ReviewsSection({ productId }: { productId: string }) {
           <div key={r.id} className="rounded-lg border p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <StarRating value={r.rating} />
+                <StarRating value={Number(r.rating)} />
                 <span className="text-sm font-medium text-zinc-900">
                   {Number(r.rating).toFixed(1)} / 5
                 </span>

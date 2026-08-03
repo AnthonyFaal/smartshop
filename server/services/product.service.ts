@@ -38,12 +38,21 @@ export async function listProducts(input: ProductListInput) {
     deletedAt: null,
     ...(input.categoryId && { categoryId: input.categoryId }),
     ...(input.storeId && { storeId: input.storeId }),
-    ...(input.search && {
-      OR: [
-        { title: { contains: input.search, mode: "insensitive" } },
-        { description: { contains: input.search, mode: "insensitive" } },
-        { tags: { has: input.search.toLowerCase() } },
-      ],
+    ...(input.search?.trim() && {
+      // Match every meaningful search token across the product fields instead
+      // of requiring the whole phrase to appear contiguously.
+      AND: input.search
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 8)
+        .map((token) => ({
+          OR: [
+            { title: { contains: token, mode: "insensitive" as const } },
+            { description: { contains: token, mode: "insensitive" as const } },
+            { tags: { has: token.toLowerCase() } },
+          ],
+        })),
     }),
     ...(input.minPrice !== undefined && { price: { gte: input.minPrice } }),
     ...(input.maxPrice !== undefined && { price: { lte: input.maxPrice } }),

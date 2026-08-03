@@ -6,7 +6,6 @@ import { ShoppingCart, Heart, MessageCircle, User } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { useAuthUser } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect } from "react";
 
 
@@ -20,7 +19,6 @@ export function Header() {
   // IMPORTANT: never call setState during render; do it in an effect.
   // We'll derive the UI from query result first, and also push it into context.
   const resolvedUser = user ?? contextUser ?? null;
-  const resolvedIsLoading = isLoading && resolvedUser === null;
   const { data: cart } = trpc.cart.get.useQuery(undefined, {
     enabled: !!resolvedUser,
   });
@@ -76,12 +74,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {resolvedIsLoading ? (
-            <>
-              <Skeleton className="h-9 w-16" />
-              <Skeleton className="h-9 w-24" />
-            </>
-          ) : resolvedUser ? (
+          {resolvedUser ? (
             <>
               <Button variant="ghost" size="icon" asChild>
                 <Link href="/wishlist" aria-label="Wishlist">

@@ -29,13 +29,18 @@ export async function POST(req: Request) {
       .update(rawBody)
       .digest("hex");
 
-    if (!paystackSignature || hash !== paystackSignature) {
+    const signatureBuffer = Buffer.from(paystackSignature, "utf8");
+    const hashBuffer = Buffer.from(hash, "utf8");
+    if (
+      signatureBuffer.length !== hashBuffer.length ||
+      !crypto.timingSafeEqual(signatureBuffer, hashBuffer)
+    ) {
       return NextResponse.json({ ok: false }, { status: 401 });
     }
 
     const payload = JSON.parse(rawBody) as {
-      event: string;
-      data: {
+      event?: string;
+      data?: {
         reference?: string;
         status?: string;
         amount?: number;
@@ -58,18 +63,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const isSuccess = payload?.data?.status === "success";
+    const providerStatus = payload?.data?.status;
+    const isSuccess = providerStatus === "success";
+    const isFailure = providerStatus === "failed" || providerStatus === "abandoned";
+    if (!isSuccess && !isFailure) {
+      return NextResponse.json({ ok: true });
+    }
+
+    const amountInGhs = Number(payload.data?.amount ?? 0) / 100;
+    const expectedAmount = Number(payment.amount);
+    const currency = payload.data?.currency ?? "GHS";
+    if (
+      currency !== payment.order.currency ||
+      !Number.isFinite(amountInGhs) ||
+      Math.round(amountInGhs * 100) !== Math.round(expectedAmount * 100)
+    ) {
+      return NextResponse.json({ ok: false, message: "Payment mismatch" }, { status: 400 });
+    }
 
     if (isSuccess) {
       await prisma.$transaction(async (tx) => {
-        await tx.payment.update({
-          where: { id: payment.id },
+        const updated = await tx.payment.updateMany({
+          where: { id: payment.id, status: "PENDING" },
           data: {
             status: "COMPLETED",
             paidAt: new Date(),
-            providerData: payload as any,
+            providerData: payload,
           },
         });
+
+        if (updated.count === 0) return;
 
         // Confirm order only once
         await tx.order.updateMany({
@@ -78,13 +101,40 @@ export async function POST(req: Request) {
         });
       });
     } else {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "FAILED",
-          providerData: payload as any,
-          failureReason: "Paystack reported failure",
-        },
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.payment.updateMany({
+          where: { id: payment.id, status: "PENDING" },
+          data: {
+            status: "FAILED",
+            providerData: payload,
+            failureReason: `Paystack reported ${providerStatus}`,
+          },
+        });
+
+        if (updated.count === 0) return;
+
+        const cancelled = await tx.order.updateMany({
+          where: { id: payment.orderId, status: "PENDING" },
+          data: {
+            status: "CANCELLED",
+            cancelledAt: new Date(),
+            cancelReason: "Payment failed",
+          },
+        });
+
+        if (cancelled.count > 0) {
+          const items = await tx.orderItem.findMany({
+            where: { orderId: payment.orderId },
+            select: { productId: true, quantity: true },
+          });
+
+          for (const item of items) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { increment: item.quantity } },
+            });
+          }
+        }
       });
     }
 

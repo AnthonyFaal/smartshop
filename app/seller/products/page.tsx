@@ -18,6 +18,7 @@ import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
@@ -231,11 +232,10 @@ export default function SellerProductsPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="store-filter">Store</Label>
-                  <select
+                  <Select
                     id="store-filter"
                     value={storeId}
                     onChange={(event) => setStoreId(event.target.value)}
-                    className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
                     disabled={storesLoading}
                   >
                     <option value="ALL">All stores</option>
@@ -244,25 +244,24 @@ export default function SellerProductsPage() {
                         {store.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="status-filter">Status</Label>
-                  <select
+                  <Select
                     id="status-filter"
                     value={status}
                     onChange={(event) =>
                       setStatus(event.target.value as ProductStatus | "ALL")
                     }
-                    className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1"
                   >
                     {statusOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
 

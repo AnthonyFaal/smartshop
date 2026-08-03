@@ -57,7 +57,7 @@ export async function calculateTrustScore(userId: string): Promise<number> {
     orderCompletionRate * 0.15 +
     Math.max(0, 100 - refundRate) * 0.1 +
     Math.max(0, 100 - disputeRate) * 0.1 +
-    (averageRating / 5) * 100 * 0.15;
+    (Number(averageRating) / 5) * 100 * 0.15;
 
   const rawScore = verificationScore + behavioralScore;
   const score = Math.min(100, Math.max(0, Math.round(rawScore)));

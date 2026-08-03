@@ -16,6 +16,7 @@ import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc/client";
 import { canUseAiFeatures } from "@/lib/config/subscriptions";
@@ -531,15 +532,15 @@ export default function SellerProductNewPage() {
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle>Variants</CardTitle>
-                      <select
-                        className="rounded-md border px-2 py-1 text-sm"
+                      <Select
+                        className="w-auto min-w-[10rem]"
                         value={sizeType}
                         onChange={(e) => setSizeType(e.target.value as SizeType)}
                       >
                         <option value="alpha">Alpha (S, M, L)</option>
                         <option value="numeric">Numeric (38-46)</option>
                         <option value="custom">Custom</option>
-                      </select>
+                      </Select>
                     </div>
                   </CardHeader>
 
@@ -563,8 +564,8 @@ export default function SellerProductNewPage() {
                             });
 
                             return (
-                              <select
-                                className="w-full mt-1 rounded-md border px-2 py-1 text-sm"
+                              <Select
+                                className="mt-1"
                                 value={variant.size}
                                 onChange={(e) => updateVariant(index, "size", e.target.value)}
                               >
@@ -574,7 +575,7 @@ export default function SellerProductNewPage() {
                                     {opt}
                                   </option>
                                 ))}
-                              </select>
+                              </Select>
                             );
                           })()}
                         </div>
@@ -633,8 +634,7 @@ export default function SellerProductNewPage() {
                               <div className="grid gap-4 sm:grid-cols-2 pt-2">
                                 <div>
                                   <Label>Category</Label>
-                                  <select
-                                    className="w-full rounded-md border px-3 py-2 text-sm"
+                                  <Select
                                     value={form.categoryId}
                                     onChange={(e) => setForm((c) => ({ ...c, categoryId: e.target.value }))}
                                   >
@@ -644,7 +644,7 @@ export default function SellerProductNewPage() {
                                         {c.name}
                                       </option>
                                     ))}
-                                  </select>
+                                  </Select>
                                 </div>
 
                                 <div>
@@ -662,8 +662,8 @@ export default function SellerProductNewPage() {
                                     {storesLoading ? (
                                       <div className="text-sm text-zinc-500">Loading stores...</div>
                                     ) : hasStores ? (
-                                      <select
-                                        className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
+                                      <Select
+                                        className="flex-1"
                                         value={selectedStoreId}
                                         onChange={(e) =>
                                           setForm((c) => ({ ...c, storeId: e.target.value }))
@@ -675,7 +675,7 @@ export default function SellerProductNewPage() {
                                             {s.name}
                                           </option>
                                         ))}
-                                      </select>
+                                      </Select>
                                     ) : (
                                       <div className="text-sm text-zinc-500">No stores yet</div>
                                     )}

@@ -114,7 +114,7 @@ export async function getSellerDashboardData(userId: string) {
       ? {
           id: store.id,
           name: store.name,
-          isVerified: store.verificationStatus,
+          isVerified: store.verificationStatus === "VERIFIED",
           productCount: store.productCount,
         }
       : null,

@@ -70,20 +70,29 @@ export class PaystackPaymentProvider implements PaymentProvider {
 
   async verifyWebhook(
     payload: string,
-    _signature: string
+    signature: string
   ): Promise<PaymentWebhookPayload> {
     // Webhook verification is handled in the route handler.
-    const data = JSON.parse(payload) as PaymentWebhookPayload & {
-      event?: string;
-      data?: any;
+    void signature;
+    const data = JSON.parse(payload) as {
+      data?: {
+        reference?: string;
+        status?: string;
+        amount?: number;
+        currency?: string;
+        metadata?: Record<string, unknown>;
+      };
+      providerRef?: string;
+      amount?: number;
+      currency?: string;
     };
 
     return {
-      providerRef: (data as any)?.data?.reference ?? data.providerRef,
-      status: mapPaymentStatus((data as any)?.data?.status) as any,
-      amount: (data as any)?.data?.amount ?? data.amount,
-      currency: (data as any)?.data?.currency ?? PAYSTACK_CURRENCY,
-      metadata: (data as any)?.data?.metadata,
+      providerRef: data.data?.reference ?? data.providerRef ?? "",
+      status: mapPaymentStatus(data.data?.status ?? ""),
+      amount: data.data?.amount ?? data.amount ?? 0,
+      currency: data.data?.currency ?? data.currency ?? PAYSTACK_CURRENCY,
+      metadata: data.data?.metadata,
     };
   }
 

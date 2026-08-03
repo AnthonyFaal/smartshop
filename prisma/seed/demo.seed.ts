@@ -27,7 +27,7 @@ function slugifyRegion(region: string) {
 
 async function upsertLocation(input: {
   name: string;
-  type: "CITY" | "TOWN" | "AREA" | "DISTRICT" | "SUBURB"| "REGION" | "COUNTRY";
+  type: "CITY" | "TOWN" | "AREA" | "DISTRICT" | "SUBURB";
   slug: string;
   region?: string | null;
   latitude?: number | null;

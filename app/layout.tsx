@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { TRPCProvider } from "@/lib/trpc/provider";
-import { getAuthUserForClient } from "@/lib/auth/get-auth-user";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,17 +30,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const initialAuthUser = await getAuthUserForClient();
-
   return (
     <html lang="en-GH" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <body className="min-h-full flex flex-col antialiased">
-        <TRPCProvider initialAuthUser={initialAuthUser}>
+        <TRPCProvider>
           {children}
           <Toaster position="top-right" richColors closeButton />
         </TRPCProvider>

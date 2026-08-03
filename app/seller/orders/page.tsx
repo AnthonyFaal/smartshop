@@ -7,6 +7,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc/client";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 
@@ -64,8 +65,8 @@ export default function SellerOrdersPage() {
                             <p className="text-sm text-zinc-500">{order.status}</p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <select
-                              className="rounded-md border border-zinc-300 px-2 py-2 text-sm"
+                            <Select
+                              className="w-auto min-w-[11rem]"
                               defaultValue={order.status}
                               onChange={(event) => {
                                 setUpdatingId(order.id);
@@ -79,7 +80,7 @@ export default function SellerOrdersPage() {
                                   {status}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                             {updatingId === order.id ? <Loader2 className="h-4 w-4 animate-spin text-zinc-500" /> : <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                           </div>
                         </div>

@@ -29,6 +29,7 @@ type SortOrder = "asc" | "desc";
 
 type AiSearchResult = {
   keywords?: string[] | string;
+  categoryId?: string | null;
   category?: string | null;
   minPrice?: number | string | null;
   maxPrice?: number | string | null;
@@ -119,11 +120,13 @@ export default function MarketplacePage() {
   const applyAiResult = (raw: string) => {
     const parsed = parseAiSearchResult(raw);
     const keywords = Array.isArray(parsed.keywords)
-      ? parsed.keywords.filter(Boolean).join(" ")
+      ? parsed.keywords.filter((keyword) => keyword?.trim()).join(" ")
       : parsed.keywords;
     const nextQuery = keywords?.trim() || search.trim();
 
-    const matchedCategory = parsed.category
+    const matchedCategory = parsed.categoryId
+      ? categories?.find((category) => category.id === parsed.categoryId)
+      : parsed.category
       ? categories?.find((category) =>
           category.name.toLowerCase().includes(String(parsed.category).toLowerCase())
         )
@@ -287,7 +290,7 @@ export default function MarketplacePage() {
                       }
                       disabled={categoriesLoading}
                     >
-                      <Select.Trigger className="mt-1 inline-flex h-10 w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 text-left text-sm text-zinc-900 shadow-sm transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60">
+                      <Select.Trigger className="mt-1 inline-flex h-10 w-full min-w-0 items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 text-left text-sm text-zinc-900 shadow-sm transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60">
                         <Select.Value>
                           {selectedCategoryName ?? "All categories"}
                         </Select.Value>
@@ -301,29 +304,29 @@ export default function MarketplacePage() {
                           side="bottom"
                           align="start"
                           sideOffset={6}
-                          avoidCollisions={false}
-                          className="z-[60] max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg"
+                          avoidCollisions
+                          className="z-[60] max-h-[min(18rem,calc(100vh-2rem))] max-w-[calc(100vw-2rem)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-lg"
                         >
-                          <Select.Viewport className="p-1">
+                          <Select.Viewport className="max-h-[min(17.5rem,calc(100vh-2.5rem))] overflow-y-auto">
                             <Select.Item
                               value="all"
-                              className="relative flex cursor-pointer select-none items-center rounded-md px-8 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-emerald-50 data-[highlighted]:text-emerald-800"
+                              className="relative flex min-w-0 cursor-pointer select-none items-center rounded-md px-8 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-emerald-50 data-[highlighted]:text-emerald-800"
                             >
                               <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
                                 <Check className="h-4 w-4" />
                               </Select.ItemIndicator>
-                              <Select.ItemText>All categories</Select.ItemText>
+                              <Select.ItemText className="truncate">All categories</Select.ItemText>
                             </Select.Item>
                             {categories?.map((category) => (
                               <Select.Item
                                 key={category.id}
                                 value={category.id}
-                                className="relative flex cursor-pointer select-none items-center rounded-md px-8 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-emerald-50 data-[highlighted]:text-emerald-800"
+                                className="relative flex min-w-0 cursor-pointer select-none items-center rounded-md px-8 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-emerald-50 data-[highlighted]:text-emerald-800"
                               >
                                 <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
                                   <Check className="h-4 w-4" />
                                 </Select.ItemIndicator>
-                                <Select.ItemText>{category.name}</Select.ItemText>
+                                <Select.ItemText className="truncate">{category.name}</Select.ItemText>
                               </Select.Item>
                             ))}
                           </Select.Viewport>
@@ -384,7 +387,7 @@ export default function MarketplacePage() {
                         setSortOrder(nextSortOrder);
                       }}
                     >
-                      <Select.Trigger className="mt-1 inline-flex h-10 w-full items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 text-left text-sm text-zinc-900 shadow-sm transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                       <Select.Trigger className="mt-1 inline-flex h-10 w-full min-w-0 items-center justify-between rounded-lg border border-zinc-200 bg-white px-3 text-left text-sm text-zinc-900 shadow-sm transition-colors hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                         <Select.Value />
                         <Select.Icon>
                           <ChevronDown className="h-4 w-4 text-zinc-500" />
@@ -396,10 +399,10 @@ export default function MarketplacePage() {
                           side="bottom"
                           align="start"
                           sideOffset={6}
-                          avoidCollisions={false}
-                          className="z-[60] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg"
-                        >
-                          <Select.Viewport className="p-1">
+                           avoidCollisions
+                           className="z-[60] max-h-[min(18rem,calc(100vh-2rem))] max-w-[calc(100vw-2rem)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-zinc-200 bg-white p-1 shadow-lg"
+                         >
+                           <Select.Viewport className="max-h-[min(17.5rem,calc(100vh-2.5rem))] overflow-y-auto">
                             {[
                               ["newest", "Newest"],
                               ["price:asc", "Price: low to high"],
@@ -410,12 +413,12 @@ export default function MarketplacePage() {
                               <Select.Item
                                 key={value}
                                 value={value}
-                                className="relative flex cursor-pointer select-none items-center rounded-md px-8 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-emerald-50 data-[highlighted]:text-emerald-800"
+                                 className="relative flex min-w-0 cursor-pointer select-none items-center rounded-md px-8 py-2 text-sm text-zinc-700 outline-none data-[highlighted]:bg-emerald-50 data-[highlighted]:text-emerald-800"
                               >
                                 <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
                                   <Check className="h-4 w-4" />
                                 </Select.ItemIndicator>
-                                <Select.ItemText>{label}</Select.ItemText>
+                                 <Select.ItemText className="truncate">{label}</Select.ItemText>
                               </Select.Item>
                             ))}
                           </Select.Viewport>
