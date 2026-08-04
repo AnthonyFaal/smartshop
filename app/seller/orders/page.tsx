@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc/client";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { OrderStatus } from "@prisma/client";
 
 const STATUS_OPTIONS = ["CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED"] as const;
 
@@ -70,7 +71,7 @@ export default function SellerOrdersPage() {
                               defaultValue={order.status}
                               onChange={(event) => {
                                 setUpdatingId(order.id);
-                                updateStatus.mutate({ orderId: order.id, status: event.target.value as any }, {
+                                updateStatus.mutate({ orderId: order.id, status: event.target.value as Extract<OrderStatus, "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "COMPLETED" | "CANCELLED"> }, {
                                   onSettled: () => setUpdatingId(null),
                                 });
                               }}

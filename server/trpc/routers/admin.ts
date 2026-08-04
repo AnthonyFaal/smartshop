@@ -758,8 +758,8 @@ export const adminRouter = createTRPCRouter({
       await createNotification({
         userId: verification.userId,
         type: "VERIFICATION",
-        title: "GPS/Campus Location Approved",
-        body: "Your GPS/campus location has been approved. Next, our team will confirm the final verification.",
+        title: "Seller verification approved",
+        body: "Your seller verification has been approved. Your store will be reviewed for VERIFIED status.",
         channels: ["IN_APP", "EMAIL", "SMS"],
       });
 
@@ -769,7 +769,7 @@ export const adminRouter = createTRPCRouter({
           action: "APPROVE",
           entityType: "SellerVerification",
           entityId: input.verificationId,
-          newValues: { step: "GPS_LOCATION", notes: input.notes ?? null },
+        newValues: { step: "SELLER_VERIFICATION", notes: input.notes ?? null },
         },
       });
 
@@ -803,7 +803,7 @@ export const adminRouter = createTRPCRouter({
       await createNotification({
         userId: verification.userId,
         type: "VERIFICATION",
-        title: "GPS/Campus Location Rejected",
+        title: "Seller verification rejected",
         body: input.reason,
         channels: ["IN_APP", "EMAIL"],
       });
@@ -814,7 +814,7 @@ export const adminRouter = createTRPCRouter({
           action: "REJECT",
           entityType: "SellerVerification",
           entityId: input.verificationId,
-          newValues: { step: "GPS_LOCATION", reason: input.reason },
+        newValues: { step: "SELLER_VERIFICATION", reason: input.reason },
         },
       });
 
@@ -849,7 +849,7 @@ export const adminRouter = createTRPCRouter({
       await createNotification({
         userId: verification.userId,
         type: "VERIFICATION",
-        title: "Resubmit GPS/Campus Location Required",
+        title: "Seller verification resubmission required",
         body: input.reason,
         channels: ["IN_APP", "EMAIL"],
       });
@@ -861,7 +861,7 @@ export const adminRouter = createTRPCRouter({
           entityType: "SellerVerification",
           entityId: input.verificationId,
           newValues: {
-            step: "GPS_LOCATION",
+            step: "SELLER_VERIFICATION",
             resubmissionReason: input.reason,
           },
         },
@@ -901,6 +901,10 @@ export const adminRouter = createTRPCRouter({
             verificationLevel: "TRUSTED_SELLER",
           },
         }),
+        prisma.store.updateMany({
+          where: { ownerId: verification.userId, deletedAt: null },
+          data: { verificationStatus: "VERIFIED", verifiedAt: new Date(), verifiedBy: ctx.user.id },
+        }),
       ]);
 
       await calculateTrustScore(verification.userId);
@@ -939,15 +943,21 @@ export const adminRouter = createTRPCRouter({
       });
       if (!verification) throw Errors.notFound("Verification");
 
-      await prisma.sellerVerification.update({
-        where: { id: input.verificationId },
-        data: {
-          status: "REJECTED",
-          reviewedBy: ctx.user.id,
-          reviewedAt: new Date(),
-          rejectionReason: input.reason,
-        },
-      });
+      await prisma.$transaction([
+        prisma.sellerVerification.update({
+          where: { id: input.verificationId },
+          data: {
+            status: "REJECTED",
+            reviewedBy: ctx.user.id,
+            reviewedAt: new Date(),
+            rejectionReason: input.reason,
+          },
+        }),
+        prisma.store.updateMany({
+          where: { ownerId: verification.userId, deletedAt: null },
+          data: { verificationStatus: "REJECTED", verifiedAt: null, verifiedBy: null },
+        }),
+      ]);
 
       await createNotification({
         userId: verification.userId,

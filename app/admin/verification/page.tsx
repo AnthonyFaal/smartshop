@@ -24,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSellerVerificationSummary } from "@/lib/admin/verification";
+import { getSellerVerificationSummary, type SellerVerificationReviewStatus, type SellerVerificationSummary } from "@/lib/admin/verification";
 
 type ReasonById = Record<string, string>;
 
@@ -40,7 +40,7 @@ type SellerQueueItem = {
   id: string;
   ghanaCardFrontUrl?: string | null;
   selfieUrl?: string | null;
-  status?: string | null;
+  status?: SellerVerificationReviewStatus | null;
   user?: SellerQueueItemUser | null;
 };
 
@@ -115,7 +115,7 @@ export default function AdminVerificationCenterPage() {
                   phoneVerified: Boolean(item.user?.phoneVerified),
                   hasGhanaCard: Boolean(item.ghanaCardFrontUrl),
                   hasSelfie: Boolean(item.selfieUrl),
-                  status: item.status as any,
+                  status: item.status,
                 });
 
                 return (
@@ -143,7 +143,7 @@ function VerificationRow({
   setReason,
 }: {
   item: SellerQueueItem;
-  summary: any;
+  summary: SellerVerificationSummary;
   reason: string;
   setReason: (value: string) => void;
 }) {
@@ -272,7 +272,7 @@ function VerificationRow({
 
               <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 text-xs text-emerald-800 mb-4 flex gap-2">
                 <Camera className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
-                <span>Verify that portraits match and physical locations correspond to real merchant points.</span>
+                <span>Verify that the submitted identity documents and selfie belong to the same seller.</span>
               </div>
 
               <label htmlFor={`reason-${item.id}`} className="sr-only">Rejection Reason</label>

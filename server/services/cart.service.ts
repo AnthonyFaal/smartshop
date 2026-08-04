@@ -43,6 +43,7 @@ export async function getCart(userId: string) {
                 stock: true,
                 status: true,
                 slug: true,
+                variants: { select: { size: true, quantity: true } },
                 store: { select: { name: true, slug: true } },
               },
             },
@@ -87,6 +88,17 @@ export async function addToCart(
         const inv = variants.find((x) => x.size === size);
         if (!inv || inv.quantity < qty) throw Errors.badRequest(`Insufficient stock for ${size}`);
       } else if (product.stock < qty) {
+        throw Errors.badRequest("Insufficient stock");
+      }
+
+      const existing = await tx.cartItem.findUnique({
+        where: { cartId_productId_selectedSize: { cartId: cart.id, productId, selectedSize: size } },
+        select: { quantity: true },
+      });
+      if (hasVariants) {
+        const inv = variants.find((x) => x.size === size);
+        if (!inv || (existing?.quantity ?? 0) + qty > inv.quantity) throw Errors.badRequest(`Insufficient stock for ${size}`);
+      } else if ((existing?.quantity ?? 0) + qty > product.stock) {
         throw Errors.badRequest("Insufficient stock");
       }
 

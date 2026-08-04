@@ -26,7 +26,7 @@ export default function TermsPage() {
           <ul className="list-disc space-y-2 pl-6">
             <li>You must be at least 18 years old, or 16 with parental consent, to use SmartShop.</li>
             <li>You must provide accurate registration information including a valid email and, where requested, a Ghana-format phone number (+233).</li>
-            <li>Sellers must complete identity verification (Ghana Card, selfie, and location validation) before listing products.</li>
+            <li>Sellers must complete identity verification (Ghana Card and selfie review) before listing products.</li>
             <li>One person may not maintain multiple accounts to manipulate trust scores or evade enforcement.</li>
           </ul>
 

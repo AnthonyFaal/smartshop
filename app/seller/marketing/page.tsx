@@ -14,9 +14,19 @@ import { useState } from "react";
 export default function SellerMarketingPage() {
   const utils = trpc.useUtils();
   const { data: products, isLoading } = trpc.product.sellerList.useQuery({ status: "ACTIVE" });
+  const { data: promotions, isLoading: promotionsLoading } = trpc.promotion.list.useQuery();
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [campaign, setCampaign] = useState({ name: "", code: "", value: "", minSubtotal: "", usageLimit: "", startsAt: "", endsAt: "" });
+  const [targetProductIds, setTargetProductIds] = useState<string[]>([]);
+  const [selectedPromotionId, setSelectedPromotionId] = useState<string | null>(null);
+  const analytics = trpc.promotion.analytics.useQuery({ promotionId: selectedPromotionId ?? "00000000-0000-0000-0000-000000000000" }, { enabled: Boolean(selectedPromotionId) });
+  const deactivatePromotion = trpc.promotion.deactivate.useMutation({ onSuccess: () => utils.promotion.list.invalidate() });
+  const createPromotion = trpc.promotion.create.useMutation({
+    onSuccess: () => { setMessage("Discount campaign created."); setError(null); setCampaign({ name: "", code: "", value: "", minSubtotal: "", usageLimit: "", startsAt: "", endsAt: "" }); setTargetProductIds([]); void utils.promotion.list.invalidate(); },
+    onError: (err) => { setError(err.message); setMessage(null); },
+  });
 
   const updateProduct = trpc.product.update.useMutation({
     onSuccess: async () => {
@@ -80,6 +90,25 @@ export default function SellerMarketingPage() {
                   })}
                 </div>
               )}
+            </CardContent>
+          </Card>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Discount code campaign</CardTitle><p className="text-sm text-zinc-500">Set a time window and target the active products this code applies to.</p></CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              {(["name", "code", "value", "minSubtotal", "usageLimit", "startsAt", "endsAt"] as const).map((field) => <label key={field} className="space-y-1 text-sm text-zinc-700"><span>{({ name: "Campaign name", code: "Discount code", value: "Discount percentage", minSubtotal: "Minimum order (GHS)", usageLimit: "Usage limit (optional)", startsAt: "Starts (local time)", endsAt: "Ends (local time)" } as const)[field]}</span><Input type={["value", "minSubtotal", "usageLimit"].includes(field) ? "number" : field.includes("At") ? "datetime-local" : "text"} min={field === "value" ? 0.01 : 0} max={field === "value" ? 100 : undefined} placeholder={field === "value" ? "e.g. 15" : undefined} value={campaign[field]} onChange={(event) => setCampaign((current) => ({ ...current, [field]: event.target.value }))} /></label>)}
+              <div className="sm:col-span-2 rounded-lg border border-zinc-200 p-3">
+                <p className="mb-2 text-sm font-medium text-zinc-800">Target products</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {products?.map((product) => <label key={product.id} className="flex items-center gap-2 text-sm text-zinc-700"><input type="checkbox" checked={targetProductIds.includes(product.id)} onChange={(event) => setTargetProductIds((current) => event.target.checked ? [...current, product.id] : current.filter((id) => id !== product.id))} />{product.title}</label>)}
+                </div>
+              </div>
+              <Button type="button" className="sm:col-span-2" disabled={createPromotion.isPending || !products?.length || targetProductIds.length === 0} onClick={() => { const product = products?.[0]; const startsAt = new Date(campaign.startsAt); const endsAt = new Date(campaign.endsAt); if (!product || campaign.name.trim().length < 2 || campaign.code.trim().length < 3 || !Number.isFinite(Number(campaign.value)) || Number(campaign.value) <= 0 || Number(campaign.value) > 100 || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) { setError("Enter a name, a 3-character code, a percentage from 0–100, and a valid campaign period."); return; } createPromotion.mutate({ storeId: product.store.id, productIds: targetProductIds, name: campaign.name, code: campaign.code, type: "PERCENTAGE", value: Number(campaign.value), minSubtotal: Number(campaign.minSubtotal || 0), usageLimit: campaign.usageLimit ? Number(campaign.usageLimit) : undefined, startsAt, endsAt }); }}>Create campaign</Button>
+            </CardContent>
+          </Card>
+          <Card className="mt-6">
+            <CardHeader><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {promotionsLoading ? <p className="text-sm text-zinc-500">Loading campaigns...</p> : promotions?.length ? promotions.map((promotion) => <div key={promotion.id} className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-zinc-900">{promotion.name} <span className="text-xs text-zinc-500">({promotion.code})</span></p><p className="text-xs text-zinc-500">{promotion.products.length} products · {promotion._count.orders} orders · {promotion.isActive ? "Active" : "Inactive"}</p>{selectedPromotionId === promotion.id && analytics.data ? <p className="mt-1 text-xs text-emerald-700">Revenue {formatCurrency(analytics.data.revenue)} · Discounted {formatCurrency(analytics.data.discountValue)}</p> : null}</div><div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setSelectedPromotionId(promotion.id)}>Analytics</Button>{promotion.isActive ? <Button type="button" size="sm" variant="outline" onClick={() => deactivatePromotion.mutate({ id: promotion.id })}>Deactivate</Button> : null}</div></div>) : <p className="text-sm text-zinc-500">No discount campaigns yet.</p>}
             </CardContent>
           </Card>
         </div>

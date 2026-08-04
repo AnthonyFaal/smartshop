@@ -153,8 +153,7 @@ export default function ProductDetailPage() {
                 fill
                 className="object-cover"
                 priority
-                unoptimized
-              />
+                              />
             </div>
 
             {product.images.length > 1 && (
@@ -186,7 +185,7 @@ export default function ProductDetailPage() {
                         alt=""
                         fill
                         className="object-cover"
-                        unoptimized
+                        
                       />
                     </button>
                   ))}
@@ -458,6 +457,8 @@ function ReviewsSection({ productId }: { productId: string }) {
   );
 
   useEffect(() => {
+    // This effect intentionally hydrates the editable review form from the server.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTitle(myReviewQuery.data?.title ?? "");
     setContent(myReviewQuery.data?.content ?? "");
     setRating(Number(myReviewQuery.data?.rating ?? 0));

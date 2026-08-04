@@ -262,7 +262,7 @@ export default function AdminDashboardPage() {
                     <Link href="/admin/verification/ghana-card">Ghana Card</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/admin/verification/gps">GPS & Location</Link>
+                    <Link href="/admin/verification">Seller Verification</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link href="/admin/subscriptions">Plans</Link>

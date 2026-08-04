@@ -39,7 +39,11 @@ export class PaystackPaymentProvider implements PaymentProvider {
         callback_url:
           process.env.PAYSTACK_CALLBACK_URL ??
           `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/checkout`,
-        metadata: input.metadata,
+        channels: input.method === "CARD" ? ["card"] : ["mobile_money"],
+        metadata: {
+          ...input.metadata,
+          phone: input.customerPhone,
+        },
       }),
     });
 
@@ -48,6 +52,7 @@ export class PaystackPaymentProvider implements PaymentProvider {
       message?: string;
       data?: {
         reference?: string;
+        access_code?: string;
         authorization?: { url?: string };
       };
     };
@@ -62,6 +67,7 @@ export class PaystackPaymentProvider implements PaymentProvider {
       providerRef,
       status: "PENDING",
       redirectUrl: body.data.authorization?.url,
+      accessCode: body.data.access_code,
       providerData: {
         raw: body.data,
       },
@@ -77,6 +83,7 @@ export class PaystackPaymentProvider implements PaymentProvider {
     const data = JSON.parse(payload) as {
       data?: {
         reference?: string;
+        access_code?: string;
         status?: string;
         amount?: number;
         currency?: string;

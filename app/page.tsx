@@ -7,7 +7,7 @@ const features = [
     icon: Shield,
     title: "Verified Sellers",
     description:
-      "Every seller passes Ghana Card verification, selfie check, and GPS location validation.",
+      "Every seller passes Ghana Card and selfie verification before their store is marked VERIFIED.",
   },
   {
     icon: Sparkles,

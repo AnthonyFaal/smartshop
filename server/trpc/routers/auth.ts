@@ -309,9 +309,9 @@ export const authRouter = createTRPCRouter({
 
   // ────────────────────────────────────────────────────────────────────────────
   // Seller verification (new automated flow)
-  // NOTE: Production OCR/liveness/face matching/location-zone logic will be
+  // NOTE: Production OCR/liveness/face matching logic will be
   // implemented in dedicated services. For now these endpoints are updated
-  // to align with the new Prisma schema and remove manual URL/GPS inputs.
+  // Verification is based on identity documents and selfie review.
 
 sellerVerificationUpsertGhanaCardImage: protectedProcedure
   .use(withErrorHandling)

@@ -96,9 +96,9 @@ function decimalToNumber(value: unknown): number {
   if (value == null) return 0;
 
   // Prisma Decimal typically supports `toNumber()` (and `toString()`).
-  if (typeof value === "object" && "toNumber" in (value as any)) {
+  if (typeof value === "object" && value !== null && "toNumber" in value && typeof value.toNumber === "function") {
     try {
-      const n = (value as any).toNumber();
+      const n = value.toNumber();
       return Number.isFinite(n) ? n : 0;
     } catch {
       return 0;

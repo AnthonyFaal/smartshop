@@ -47,7 +47,7 @@ export function Header() {
             alt="SmartShop logo"
             width={25}
             height={25}
-            className="object-contain"
+            className="object-contain w-auto h-auto"
             priority
           />
         </div>

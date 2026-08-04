@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import Script from "next/script";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -18,6 +19,12 @@ import { trpc } from "@/lib/trpc/client";
 import { formatCurrency } from "@/lib/utils/format";
 import { useAuthUser } from "@/components/providers/auth-provider";
 
+declare global {
+  interface Window {
+    PaystackPop?: new () => { resumeTransaction: (accessCode: string) => void };
+  }
+}
+
 const checkoutSchema = z.object({
   // Tarkwa-only defaults; shipping address line inputs are not shown in UI.
   line1: z.string().min(1),
@@ -27,6 +34,9 @@ const checkoutSchema = z.object({
   postalCode: z.string().optional(),
   fulfillmentLocationId: z.string().uuid().optional(),
   paymentMethod: z.enum(["MOBILE_MONEY", "CARD"]),
+  paymentPhone: z.string().trim().regex(/^\+?[0-9]{9,15}$/, "Enter a valid phone number"),
+  cardholderName: z.string().trim().optional(),
+  promoCode: z.string().trim().max(40).optional(),
   notes: z.string().optional(),
 });
 
@@ -37,6 +47,16 @@ export default function CheckoutPage() {
   const utils = trpc.useUtils();
   const { user } = useAuthUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const verifyPaystack = trpc.order.verifyPaystack.useMutation({
+    onSuccess: () => {
+      toast.success("Payment completed successfully!");
+      router.push("/orders");
+    },
+    onError: (error) => {
+      setIsSubmitting(false);
+      toast.error(error.message);
+    },
+  });
 
   const { data: cart, isLoading: cartLoading } = trpc.cart.get.useQuery(
     undefined,
@@ -68,6 +88,8 @@ export default function CheckoutPage() {
       region: "Western Region",
       city: "Tarkwa",
       paymentMethod: "MOBILE_MONEY",
+      paymentPhone: user?.phone ?? "",
+      promoCode: "",
     },
   });
 
@@ -75,8 +97,39 @@ export default function CheckoutPage() {
     onSuccess: async (data) => {
       await utils.cart.get.invalidate();
 
+      if (data?.paystackAccessCode && data.paystackReference) {
+        if (!window.PaystackPop) {
+          toast.error("Payment checkout is still loading. Please try again.");
+          setIsSubmitting(false);
+          return;
+        }
+        const popup = new window.PaystackPop();
+        popup.resumeTransaction(data.paystackAccessCode);
+        const paymentReference = data.paystackReference;
+        const verifyAfterPopup = async (attempt = 0): Promise<void> => {
+          if (attempt >= 10) {
+            setIsSubmitting(false);
+            toast.info("Payment is still processing. We’ll update your order when Paystack confirms it.");
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, attempt === 0 ? 3000 : 5000));
+          try {
+            const result = await verifyPaystack.mutateAsync({ reference: paymentReference });
+            if (result.success) return;
+            if (result.status === "FAILED") {
+              setIsSubmitting(false);
+              toast.error("Paystack reported that the payment failed.");
+              return;
+            }
+            await verifyAfterPopup(attempt + 1);
+          } catch {
+            await verifyAfterPopup(attempt + 1);
+          }
+        };
+        void verifyAfterPopup();
+        return;
+      }
       if (data?.paystackRedirectUrl) {
-        // Redirect user to Paystack authorization
         window.location.href = data.paystackRedirectUrl;
         return;
       }
@@ -100,6 +153,15 @@ export default function CheckoutPage() {
   const total = subtotal + fee;
 
   const selectedPaymentMethod = watch("paymentMethod");
+  const promoCode = watch("promoCode") ?? "";
+  const promotionPreview = trpc.order.previewPromotion.useQuery(
+    { promoCode: promoCode.trim() },
+    { enabled: Boolean(user && cart?.items.length && promoCode.trim().length >= 3), retry: false }
+  );
+  const appliedPreview = promotionPreview.data?.valid ? promotionPreview.data : null;
+  const appliedDiscount = appliedPreview?.discount ?? 0;
+  const displayedFee = appliedPreview?.fee ?? fee;
+  const displayedTotal = appliedPreview?.total ?? total;
   const onSubmit = (data: CheckoutForm) => {
     if (!cart?.items.length) {
       toast.error("Your cart is empty");
@@ -107,16 +169,20 @@ export default function CheckoutPage() {
     }
 
     setIsSubmitting(true);
-    const { paymentMethod, notes, ...address } = data;
+    const { paymentMethod, paymentPhone, cardholderName, promoCode, notes, ...address } = data;
     createOrder.mutate({
       shippingAddress: { ...address, country: "GH" },
       paymentMethod,
+      paymentPhone,
+      cardholderName,
+      promoCode,
       notes,
     });
   };
 
   return (
     <PageShell showVerificationBanner>
+      <Script src="https://js.paystack.co/v2/inline.js" strategy="afterInteractive" />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Checkout</h1>
@@ -160,7 +226,7 @@ export default function CheckoutPage() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="fulfillmentLocationId">
-                      Drop-off
+                      Pickup / drop-off location
                     </Label>
                     <Select
                       id="fulfillmentLocationId"
@@ -174,6 +240,7 @@ export default function CheckoutPage() {
                         </option>
                       ))}
                     </Select>
+                    <p className="text-xs text-zinc-500">Delivery is currently available at listed Tarkwa locations only.</p>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -215,6 +282,50 @@ export default function CheckoutPage() {
                       <span className="text-sm">{method.label}</span>
                     </label>
                   ))}
+                  <div className="space-y-2 pt-2">
+                    <Label htmlFor="paymentPhone">Payment phone number</Label>
+                    <Input
+                      id="paymentPhone"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="+233 24 123 4567"
+                      {...register("paymentPhone")}
+                    />
+                    {errors.paymentPhone ? (
+                      <p className="text-xs text-red-600">{errors.paymentPhone.message}</p>
+                    ) : null}
+                    <p className="text-xs text-zinc-500">
+                      Used for mobile-money authorization. Card details are never entered on SmartShop.
+                    </p>
+                  </div>
+                  {selectedPaymentMethod === "CARD" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="cardholderName">Name on card</Label>
+                      <Input
+                        id="cardholderName"
+                        autoComplete="cc-name"
+                        placeholder="Name as shown on card"
+                        {...register("cardholderName")}
+                      />
+                      <p className="text-xs text-zinc-500">
+                        Card number, expiry, and CVC are entered securely on Paystack’s hosted payment page.
+                      </p>
+                    </div>
+                  ) : null}
+                  <div className="space-y-2 pt-2">
+                    <Label htmlFor="promoCode">Discount code</Label>
+                    <Input id="promoCode" placeholder="Optional code" {...register("promoCode")} />
+                    {promoCode.trim().length >= 3 ? (
+                      <p className={`text-xs ${promotionPreview.data?.valid ? "text-emerald-700" : "text-zinc-500"}`} aria-live="polite">
+                        {promotionPreview.isFetching
+                          ? "Checking discount code..."
+                          : appliedPreview
+                            ? `${appliedPreview.code} applied — you save ${formatCurrency(appliedPreview.discount ?? 0)}.`
+                            : promotionPreview.data?.reason ?? "Enter a valid code to see your savings."}
+                      </p>
+                    ) : null}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -232,7 +343,6 @@ export default function CheckoutPage() {
                           src={item.product.images[0]}
                           alt={item.product.title}
                           fill
-                          unoptimized
                           className="object-cover"
                           sizes="56px"
                         />
@@ -254,13 +364,19 @@ export default function CheckoutPage() {
                     <span>Subtotal</span>
                     <span>{formatCurrency(subtotal)}</span>
                   </div>
+                  {appliedDiscount > 0 ? (
+                    <div className="flex justify-between text-sm text-emerald-700">
+                      <span>Discount</span>
+                      <span>-{formatCurrency(appliedDiscount)}</span>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between text-sm text-zinc-600">
                     <span>Marketplace Fee ({(feePercent * 100).toFixed(2)}%)</span>
-                    <span>{formatCurrency(fee)}</span>
+                    <span>{formatCurrency(displayedFee)}</span>
                   </div>
                   <div className="flex justify-between border-t border-zinc-200 pt-3 font-semibold">
                     <span>Total</span>
-                    <span>{formatCurrency(total)}</span>
+                    <span>{formatCurrency(displayedTotal)}</span>
                   </div>
                 </div>
                 <Button
@@ -270,7 +386,7 @@ export default function CheckoutPage() {
                 >
                   {isSubmitting || createOrder.isPending
                     ? "Processing..."
-                    : `Pay ${formatCurrency(total)}`}
+                    : `Pay ${formatCurrency(displayedTotal)}`}
                 </Button>
               </CardContent>
             </Card>

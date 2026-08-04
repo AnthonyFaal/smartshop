@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { Errors } from "@/server/errors";
+import { settlePayment } from "@/server/services/order.service";
 
 // Paystack sends webhook payloads with content-type application/json
 // and X-Paystack-Signature header.
@@ -81,62 +82,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, message: "Payment mismatch" }, { status: 400 });
     }
 
-    if (isSuccess) {
-      await prisma.$transaction(async (tx) => {
-        const updated = await tx.payment.updateMany({
-          where: { id: payment.id, status: "PENDING" },
-          data: {
-            status: "COMPLETED",
-            paidAt: new Date(),
-            providerData: payload,
-          },
-        });
-
-        if (updated.count === 0) return;
-
-        // Confirm order only once
-        await tx.order.updateMany({
-          where: { id: payment.orderId, status: { in: ["PENDING"] } },
-          data: { status: "CONFIRMED" },
-        });
-      });
-    } else {
-      await prisma.$transaction(async (tx) => {
-        const updated = await tx.payment.updateMany({
-          where: { id: payment.id, status: "PENDING" },
-          data: {
-            status: "FAILED",
-            providerData: payload,
-            failureReason: `Paystack reported ${providerStatus}`,
-          },
-        });
-
-        if (updated.count === 0) return;
-
-        const cancelled = await tx.order.updateMany({
-          where: { id: payment.orderId, status: "PENDING" },
-          data: {
-            status: "CANCELLED",
-            cancelledAt: new Date(),
-            cancelReason: "Payment failed",
-          },
-        });
-
-        if (cancelled.count > 0) {
-          const items = await tx.orderItem.findMany({
-            where: { orderId: payment.orderId },
-            select: { productId: true, quantity: true },
-          });
-
-          for (const item of items) {
-            await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: { increment: item.quantity } },
-            });
-          }
-        }
-      });
-    }
+    await settlePayment(
+      reference,
+      isSuccess,
+      payload as unknown as import("@prisma/client").Prisma.InputJsonValue,
+      isFailure ? `Paystack reported ${providerStatus}` : undefined
+    );
 
     return NextResponse.json({ ok: true });
   } catch (e) {

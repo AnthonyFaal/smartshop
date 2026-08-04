@@ -286,7 +286,7 @@ export default function SellerProductsPage() {
                   <div className={cn("divide-y divide-zinc-200", productsFetching && "opacity-70")}>
                     {productList.map((product) => {
                       const imageUrl = product.images[0];
-                      const canActivate = product.stock > 0;
+                      const canActivate = product.effectiveStock > 0;
 
                       return (
                         <div
@@ -300,7 +300,6 @@ export default function SellerProductsPage() {
                                   src={imageUrl}
                                   alt={product.title}
                                   fill
-                                  unoptimized
                                   className="object-cover"
                                 />
                               ) : (
@@ -327,7 +326,7 @@ export default function SellerProductsPage() {
 
                           <div>
                             <p className="text-sm font-medium text-zinc-900">
-                              {product.stock}
+                              {product.effectiveStock}
                             </p>
                             <p className="text-xs text-zinc-500">in stock</p>
                           </div>

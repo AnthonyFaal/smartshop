@@ -67,7 +67,7 @@ export default function SellerInventoryPage() {
     setTimeout(() => setSuccessId(null), 2500);
   };
 
-  const productList = useMemo(() => (products ?? []) as any[], [products]);
+  const productList = products ?? [];
 
   const stats = useMemo(
     () =>
@@ -235,7 +235,7 @@ export default function SellerInventoryPage() {
                 </div>
               ) : filteredProducts.length > 0 ? (
                 <div className="divide-y divide-zinc-200 rounded-lg border border-zinc-200">
-                  {filteredProducts.map((product: any) => {
+                  {filteredProducts.map((product) => {
                     const effectiveStock = product.effectiveStock ?? product.stock;
                     const hasVariants = (product.variants?.length ?? 0) > 0;
                     const isExpanded = expandedProducts[product.id] ?? true; // Default expanded, toggle to collapse                    
@@ -267,7 +267,7 @@ export default function SellerInventoryPage() {
 
                           {isExpanded && (
                             <div className="divide-y divide-zinc-200 rounded-lg border border-zinc-200 bg-zinc-50/50 ml-9">
-                              {product.variants.map((variant: any) => {
+                               {product.variants.map((variant) => {
                                 const value = draftVariantStock[variant.id] ?? String(variant.quantity);
                                 const changed = value !== String(variant.quantity);
                                 const isSuccess = successId === variant.id;

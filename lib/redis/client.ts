@@ -21,7 +21,7 @@ function isUpstashTcp(url: string): boolean {
   return url.startsWith("rediss://") || url.includes(".upstash.io");
 }
 
-function useUpstashRest(): boolean {
+function hasUpstashRest(): boolean {
   return Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
 }
 
@@ -90,7 +90,7 @@ function createIoRedisClient(): RedisClient {
 }
 
 function createRedisClient(): RedisClient {
-  if (useUpstashRest()) {
+  if (hasUpstashRest()) {
     console.info("[Redis] Using Upstash REST client");
     return createUpstashRestClient();
   }

@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc/client";
 import { canUseAiFeatures } from "@/lib/config/subscriptions";
+import { SubscriptionPlan } from "@prisma/client";
 
 export default function SellerAiPage() {
   const { data: me } = trpc.auth.me.useQuery();
   const plan = me?.subscription?.plan ?? "FREE";
   const status = me?.subscription?.status ?? "EXPIRED";
-  const aiEnabled = canUseAiFeatures(plan as any) && status === "ACTIVE";
+  const aiEnabled = canUseAiFeatures(plan as SubscriptionPlan) && status === "ACTIVE";
 
   return (
     <PageShell showVerificationBanner>

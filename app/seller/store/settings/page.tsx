@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Save } from "lucide-react";
@@ -40,6 +40,14 @@ const emptyForm: FormState = {
 };
 
 export default function StoreSettingsPage() {
+  return (
+    <Suspense fallback={<main className="flex min-h-[60vh] items-center justify-center">Loading...</main>}>
+      <StoreSettingsForm />
+    </Suspense>
+  );
+}
+
+function StoreSettingsForm() {
   const utils = trpc.useUtils();
   const { data: stores, isLoading } = trpc.store.list.useQuery();
   const searchParams = useSearchParams();

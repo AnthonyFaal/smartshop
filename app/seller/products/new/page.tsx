@@ -178,6 +178,7 @@ export default function SellerProductNewPage() {
         const data = new FormData();
         data.append("file", file);
         data.append("pathPrefix", "product-images");
+        data.append("bucketType", "product");
 
         const res = await fetch("/api/uploads/public-image", {
           method: "POST",
@@ -722,7 +723,6 @@ export default function SellerProductNewPage() {
                             src={url}
                             alt="Uploaded product preview"
                             fill
-                            unoptimized
                             className="object-cover"
                           />
                         </div>

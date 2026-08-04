@@ -110,9 +110,13 @@ export async function uploadPublicImage(
     const arrayBuffer = await input.file.arrayBuffer();
     body = Buffer.from(arrayBuffer);
   } else {
-    body = Buffer.isBuffer(input.file)
-      ? input.file
-      : Buffer.from(input.file as any);
+    if (Buffer.isBuffer(input.file)) {
+      body = input.file;
+    } else if (typeof input.file === "object" && "arrayBuffer" in input.file) {
+      body = Buffer.from(await input.file.arrayBuffer());
+    } else {
+      body = Buffer.from(input.file as unknown as Uint8Array);
+    }
   }
 
   await client.send(
@@ -126,6 +130,28 @@ export async function uploadPublicImage(
 
   const publicUrl = `${env.S3_PUBLIC_URL}/${input.bucket}/${storageKey}`;
   return { publicUrl, storageKey };
+}
+
+export async function uploadPrivateImage(
+  input: UploadPublicImageInput
+): Promise<{ storageKey: string }> {
+  const client = getS3Client();
+  const { ext, mimeType } = getFileInfo(input);
+  const safePrefix = input.pathPrefix.replace(/^\/+|\/+$/g, "");
+  const storageKey = `private/${safePrefix}/${nanoid()}.${ext}`;
+  const body = typeof File !== "undefined" && input.file instanceof File
+    ? Buffer.from(await input.file.arrayBuffer())
+    : Buffer.isBuffer(input.file)
+      ? input.file
+      : Buffer.from(input.file as unknown as Uint8Array);
+
+  await client.send(new PutObjectCommand({
+    Bucket: input.bucket,
+    Key: storageKey,
+    ContentType: mimeType,
+    Body: body,
+  }));
+  return { storageKey };
 }
 
 

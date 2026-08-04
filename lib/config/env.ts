@@ -91,6 +91,10 @@ function parseEnv(): Env {
       "dev-only-csrf-secret-change-in-production!",
   };
 
+  if (trimmedEnv.NODE_ENV === "production" && (!trimmedEnv.JWT_SECRET || !trimmedEnv.CSRF_SECRET)) {
+    throw new Error("JWT_SECRET and CSRF_SECRET must be explicitly configured in production");
+  }
+
   const result = envSchema.safeParse(withDefaults);
   if (!result.success) {
     const formatted = result.error.issues

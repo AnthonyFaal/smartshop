@@ -10,6 +10,7 @@ import { messageRouter } from "@/server/trpc/routers/message";
 import { locationRouter } from "@/server/trpc/routers/location";
 import { wishlistRouter } from "@/server/trpc/routers/wishlist";
 import { reviewRouter } from "@/server/trpc/routers/review";
+import { promotionRouter } from "@/server/trpc/routers/promotion";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -23,6 +24,7 @@ export const appRouter = createTRPCRouter({
   location: locationRouter,
   wishlist: wishlistRouter,
   review: reviewRouter,
+  promotion: promotionRouter,
 });
 
 

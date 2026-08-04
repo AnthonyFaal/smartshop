@@ -270,6 +270,7 @@ model Product {
   reports       Report[]
   reviews       Review[]
   wishlistItems WishlistItem[]
+  promotions   PromotionProduct[]
 
   @@unique([storeId, slug])
   @@index([sellerId])
@@ -429,12 +430,25 @@ model Promotion {
   seller       User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   orders       Order[]
+  products     PromotionProduct[]
 
   @@unique([storeId, code])
   @@index([sellerId, isActive])
   @@index([storeId, isActive])
   @@index([code, isActive])
   @@map("promotions")
+}
+
+model PromotionProduct {
+  promotionId String    @map("promotion_id") @db.Uuid
+  productId   String    @map("product_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, productId])
+  @@index([productId])
+  @@map("promotion_products")
 }
 
 model Subscription {

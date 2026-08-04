@@ -14,6 +14,7 @@ export interface InitiatePaymentResult {
   providerRef: string;
   status: PaymentStatus;
   redirectUrl?: string;
+  accessCode?: string;
   providerData?: Record<string, unknown>;
 }
 
@@ -84,4 +85,3 @@ export function registerPaymentProvider(
 ): void {
   providers[name] = provider;
 }
-

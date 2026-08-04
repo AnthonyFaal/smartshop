@@ -12,7 +12,7 @@ describe("getSellerVerificationSummary", () => {
     });
 
     expect(summary.progress).toBe(100);
-    expect(summary.completedCount).toBe(4);
+    expect(summary.completedCount).toBe(3);
     expect(summary.statusLabel).toBe("Under review");
     expect(summary.pendingSteps).toEqual([]);
   });
@@ -25,9 +25,9 @@ describe("getSellerVerificationSummary", () => {
       status: "PENDING",
     });
 
-    expect(summary.progress).toBe(50);
+    expect(summary.progress).toBe(67);
     expect(summary.completedCount).toBe(2);
     expect(summary.statusLabel).toBe("Pending");
-    expect(summary.pendingSteps).toEqual(["Ghana Card", "Campus location"]);
+    expect(summary.pendingSteps).toEqual(["Ghana Card"]);
   });
 });

@@ -12,12 +12,37 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc/client";
 import { formatCurrency } from "@/lib/utils/format";
 
+type CartItem = {
+  id: string;
+  quantity: number;
+  selectedSize?: string | null;
+  product: {
+    id: string;
+    title: string;
+    price: number | string | { toString(): string };
+    images: string[];
+    stock: number;
+    variants?: Array<{ size: string; quantity: number }>;
+    store: {
+      name: string;
+      slug: string;
+    };
+  };
+};
+
+type CartData = {
+  items: CartItem[];
+};
+
 export default function CartPage() {
   const utils = trpc.useUtils();
   const { data: cart, isLoading } = trpc.cart.get.useQuery();
   const updateMutation = trpc.cart.update.useMutation({
     onSuccess: () => utils.cart.get.invalidate(),
-    onError: (error) => toast.error(error.message),
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Unable to update cart";
+      toast.error(message);
+    },
   });
   const removeMutation = trpc.cart.remove.useMutation({
     onSuccess: () => {
@@ -26,12 +51,14 @@ export default function CartPage() {
     },
   });
 
-  const subtotal =
-    cart?.items.reduce(
-      (sum, item) => sum + Number(item.product.price) * item.quantity,
-      0
-    ) ?? 0;
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
+  const cartData = (cart as CartData | undefined) ?? undefined;
+  const cartItems = cartData?.items ?? [];
+
+  const subtotal = cartItems.reduce<number>(
+    (sum, item: CartItem) => sum + Number(item.product.price) * item.quantity,
+    0
+  );
+  const itemCount = cartItems.reduce<number>((sum, item: CartItem) => sum + item.quantity, 0);
 
   if (isLoading) {
     return (
@@ -68,7 +95,7 @@ export default function CartPage() {
           </Button>
         </div>
 
-        {!cart?.items.length ? (
+        {!cartItems.length ? (
           <div className="mt-12 rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-14 text-center">
             <ShoppingBag className="mx-auto h-10 w-10 text-zinc-300" aria-hidden />
             <p className="mt-4 text-lg font-medium text-zinc-900">Your cart is empty</p>
@@ -80,7 +107,7 @@ export default function CartPage() {
         ) : (
           <div className="mt-8 grid gap-8 lg:grid-cols-3">
             <div className="space-y-4 lg:col-span-2">
-              {cart.items.map((item) => (
+              {cartItems.map((item: CartItem) => (
                 <Card key={item.id} className="overflow-hidden">
                   <CardContent className="flex flex-col gap-4 p-4 sm:flex-row">
                     <Link
@@ -92,7 +119,6 @@ export default function CartPage() {
                           src={item.product.images[0]}
                           alt={item.product.title}
                           fill
-                          unoptimized
                           className="object-cover"
                           sizes="(max-width: 640px) 100vw, 112px"
                         />
@@ -117,10 +143,7 @@ export default function CartPage() {
                         <div className="flex items-center gap-2">
                           {(() => {
                             const selectedSize = (item.selectedSize ?? "").trim();
-                            const variants = (item.product as any)
-                              ?.variants as
-                              | Array<{ size: string; quantity: number }>
-                              | undefined;
+                            const variants = item.product.variants;
 
                             const maxQty =
                               Array.isArray(variants) &&

@@ -51,6 +51,7 @@ export async function getSellerDashboardData(userId: string) {
         price: true,
         status: true,
         stock: true,
+        variants: { select: { quantity: true } },
         viewCount: true,
         soldCount: true,
         createdAt: true,
@@ -108,7 +109,7 @@ export async function getSellerDashboardData(userId: string) {
     planStatus,
     planLabel: planMeta.label,
     planDescription: planMeta.description,
-    verificationStatus: user?.sellerVerification?.status ?? "PENDING",
+    verificationStatus: store?.verificationStatus ?? "PENDING",
     trustScore: user?.trustScore?.score ?? 0,
     store: store
       ? {
@@ -139,7 +140,10 @@ export async function getSellerDashboardData(userId: string) {
       title: product.title,
       price: Number(product.price),
       status: product.status,
-      stock: product.stock,
+      stock:
+        product.variants.length > 0
+          ? product.variants.reduce((sum, variant) => sum + variant.quantity, 0)
+          : product.stock,
       createdAt: product.createdAt,
     })),
     recentOrders: orders.map((order) => ({

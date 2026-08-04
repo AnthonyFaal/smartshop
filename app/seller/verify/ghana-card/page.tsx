@@ -119,18 +119,16 @@ export default function GhanaCardVerifyPage() {
 
       const data = new FormData();
       data.append("file", file);
-      data.append("pathPrefix", "ghana-card");
-
-      const res = await fetch("/api/uploads/public-image", {
+      const res = await fetch("/api/uploads/verification-document", {
         method: "POST",
         body: data,
       });
 
       if (!res.ok) throw new Error("Image upload failed");
 
-      const json = (await res.json()) as { publicUrl: string };
+      const json = (await res.json()) as { documentUrl: string };
 
-      setImageUrl(json.publicUrl);
+      setImageUrl(json.documentUrl);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Invalid image");
     } finally {
