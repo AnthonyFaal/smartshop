@@ -1,5 +1,5 @@
 "use client";
-
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -350,7 +350,13 @@ function DocumentPreview({ title, url, alt }: { title: string; url: string | nul
         </a>
       </div>
       <div className="p-2 bg-white flex items-center justify-center">
-        <img src={url ?? undefined} alt={alt} className="h-32 w-full object-cover rounded bg-zinc-50 transition-transform duration-200 group-hover:scale-105" />
+        <Image
+          src={url ?? ""}
+          alt={alt}
+          width={400}
+          height={128}
+          className="h-32 w-full rounded object-cover bg-zinc-50 transition-transform duration-200 group-hover:scale-105"
+        />
       </div>
     </div>
   );

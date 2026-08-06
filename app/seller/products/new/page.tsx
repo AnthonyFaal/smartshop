@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -356,7 +356,7 @@ export default function SellerProductNewPage() {
     }
 
     try {
-      const created = await createProduct.mutateAsync({
+      await createProduct.mutateAsync({
         storeId: selectedStoreId,
         categoryId: form.categoryId || undefined,
         title: form.title,

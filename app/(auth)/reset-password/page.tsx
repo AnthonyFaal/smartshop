@@ -52,7 +52,6 @@ function ResetPasswordForm() {
     handleSubmit,
     formState: { errors },
     setValue,
-    watch,
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -65,12 +64,6 @@ function ResetPasswordForm() {
     if (emailFromQuery) setValue("email", emailFromQuery, { shouldValidate: false });
   }, [searchParams, setValue]);
 
-  const watchEmail = watch("email");
-
-
-
-
-
   const resendResetCode = trpc.auth.resendResetCode.useMutation({
     onSuccess: (data) => {
       toast.success("A new reset code was sent");
@@ -81,18 +74,20 @@ function ResetPasswordForm() {
   },
   });
 
-  const [nextAllowedAt, setNextAllowedAt] = useState<number>(Date.now());
-  const [nowTick, setNowTick] = useState<number>(Date.now());
+  const [nextAllowedAt, setNextAllowedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState<number>(0);
 
   useEffect(() => {
+    const initialNow = Date.now();
+    setNextAllowedAt(initialNow);
+
     const id = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
-  const secondsLeft = Math.max(
-    0,
-    Math.ceil((nextAllowedAt - nowTick) / 1000)
-  );
+  const secondsLeft = nextAllowedAt == null
+    ? 0
+    : Math.max(0, Math.ceil((nextAllowedAt - nowTick) / 1000));
 
 
   const canResend = secondsLeft <= 0 && !resendResetCode.isPending;
@@ -178,10 +173,10 @@ function ResetPasswordForm() {
                   type="button"
                   variant="outline"
                   className="w-full sm:w-auto"
-                  disabled={!canResend || !watchEmail}
+                  disabled={!canResend}
                   onClick={() =>
                     resendResetCode.mutate({
-                      email: watchEmail!,
+                      email: searchParams.get("email") ?? "",
                     })
                   }
                 >

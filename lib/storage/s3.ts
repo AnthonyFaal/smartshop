@@ -87,11 +87,6 @@ function getFileInfo(input: UploadPublicImageInput): {
   return { ext: "jpg", mimeType: "image/jpeg" };
 }
 
-function toUint8Array(data: Buffer | ArrayBuffer): Uint8Array {
-  if (data instanceof Uint8Array) return data;
-  return new Uint8Array(data);
-}
-
 export async function uploadPublicImage(
   input: UploadPublicImageInput
 ): Promise<{ publicUrl: string; storageKey: string; }> {

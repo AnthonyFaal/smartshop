@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { BarChart3 } from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import { Button } from "@/components/ui/button";

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import {
@@ -49,15 +48,6 @@ function formatStatus(status: string | null | undefined) {
     default:
       return status ?? "Unknown";
   }
-}
-
-function formatLimitValue(value: number, label: string) {
-  if (label === "maxProducts") {
-    if (!Number.isFinite(value)) return "Unlimited";
-    return String(value);
-  }
-  if (!Number.isFinite(value)) return "Unlimited";
-  return String(value);
 }
 
 export default function SellerSubscriptionPage() {

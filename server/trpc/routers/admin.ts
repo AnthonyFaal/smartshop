@@ -9,7 +9,7 @@ import { Errors } from "@/server/errors";
 import { calculateTrustScore } from "@/server/services/trust.service";
 import { createNotification } from "@/lib/notifications/service";
 import { getPlanLimits } from "@/lib/config/subscriptions";
-import { SubscriptionPlan, SubscriptionStatus, NotificationChannel, NotificationType } from "@prisma/client";
+import { SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
 
 async function syncSubscriptionOfferingsForAdmin() {
   const defaults = (await import("@/lib/config/subscriptions")).getDefaultSubscriptionOfferings();

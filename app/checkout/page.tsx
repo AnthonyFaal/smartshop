@@ -5,7 +5,7 @@ import Link from "next/link";
 import Script from "next/script";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -77,7 +77,7 @@ export default function CheckoutPage() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     formState: { errors },
   } = useForm<CheckoutForm>({
     resolver: zodResolver(checkoutSchema),
@@ -152,8 +152,15 @@ export default function CheckoutPage() {
   const fee = subtotal * feePercent;
   const total = subtotal + fee;
 
-  const selectedPaymentMethod = watch("paymentMethod");
-  const promoCode = watch("promoCode") ?? "";
+  const selectedPaymentMethod = useWatch({
+  control,
+  name: "paymentMethod",
+});
+
+const promoCode = useWatch({
+  control,
+  name: "promoCode",
+}) ?? "";
   const promotionPreview = trpc.order.previewPromotion.useQuery(
     { promoCode: promoCode.trim() },
     { enabled: Boolean(user && cart?.items.length && promoCode.trim().length >= 3), retry: false }

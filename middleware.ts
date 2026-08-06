@@ -3,7 +3,6 @@ import type { NextRequest } from "next/server";
 
 const protectedRoutes = ["/cart", "/checkout", "/orders", "/messages", "/wishlist", "/settings", "/seller"];
 const adminRoutes = ["/admin"];
-const authRoutes = ["/login", "/register"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -15,8 +14,6 @@ export function middleware(request: NextRequest) {
     pathname.startsWith(route)
   );
   const isAdmin = adminRoutes.some((route) => pathname.startsWith(route));
-  const isAuth = authRoutes.some((route) => pathname.startsWith(route));
-
   if ((isProtected || isAdmin) && !hasSession) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);

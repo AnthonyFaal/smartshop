@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { trpc } from "@/lib/trpc/client";
 
 import { PageShell } from "@/components/layout/page-shell";
@@ -21,7 +22,7 @@ const MIN_HEIGHT = 600;
 async function loadImage(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(file);
-    const img = new Image();
+    const img = document.createElement("img");
 
     img.onload = () => {
       URL.revokeObjectURL(url);
@@ -151,8 +152,11 @@ export default function GhanaCardVerifyPage() {
               <div className="mt-2 rounded-xl border border-dashed p-6 text-center">
                 {imageUrl ? (
                   <div>
-                    <img
+                    <Image
                       src={imageUrl}
+                      alt="Uploaded Ghana Card"
+                      width={400}
+                      height={240}
                       className="mx-auto max-h-60 rounded-lg object-contain"
                     />
 

@@ -1,8 +1,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "./types";
 import { getDefaultSubscriptionOfferings } from "@/lib/config/subscriptions";
-import { SubscriptionPlan } from "@prisma/client";
-import { LocationType } from "@prisma/client";
+import { LocationType, SubscriptionPlan } from "@prisma/client";
 
 // IMPORTANT: Prisma enum LocationType only supports:
 // CITY, TOWN, AREA, DISTRICT, SUBURB (no COUNTRY/REGION).

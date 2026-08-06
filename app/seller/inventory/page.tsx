@@ -67,7 +67,7 @@ export default function SellerInventoryPage() {
     setTimeout(() => setSuccessId(null), 2500);
   };
 
-  const productList = products ?? [];
+  const productList = useMemo(() => products ?? [], [products]);
 
   const stats = useMemo(
     () =>

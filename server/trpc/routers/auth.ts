@@ -16,7 +16,7 @@ import {
   getPlanOrder,
   normalizeSubscriptionOffering,
 } from "@/lib/config/subscriptions";
-import { OtpPurpose, PaymentMethod,  SubscriptionPlan } from "@prisma/client";
+import { OtpPurpose, PaymentMethod, SubscriptionPlan } from "@prisma/client";
 
 async function syncSubscriptionOfferings() {
   const defaults = getDefaultSubscriptionOfferings();
@@ -99,7 +99,7 @@ export const authRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { acceptTerms: _, ...registerInput } = input;
+      const { acceptTerms: _acceptTerms, ...registerInput } = input;
       const result = await authService.registerUser({
         ...registerInput,
         userAgent: ctx.userAgent,

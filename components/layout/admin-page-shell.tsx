@@ -4,10 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Users,
-  Store,
-  Package,
-  Shield,
   Clock3,
   BadgeCheck,
   Settings,
@@ -15,7 +11,6 @@ import {
   FileText,
   BarChart3,
   CreditCard,
-  Landmark,
   Menu,
   X,
 } from "lucide-react";

@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   ShieldCheck,
   Camera,
-  MapPin,
   CreditCard,
   CheckCircle2,
   ArrowRight,
