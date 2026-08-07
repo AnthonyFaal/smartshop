@@ -18,13 +18,15 @@ import {
 } from "lucide-react";
 
 import { trpc } from "@/lib/trpc/client";
-import { Header } from "@/components/layout/header";
+import { AdminPageShell } from "@/components/layout/admin-page-shell";
+import { PageShell } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSellerVerificationSummary, type SellerVerificationReviewStatus, type SellerVerificationSummary } from "@/lib/admin/verification";
+import { adminRoutes } from "@/lib/admin/navigation";
 
 type ReasonById = Record<string, string>;
 
@@ -54,14 +56,14 @@ export default function AdminVerificationCenterPage() {
   const items = (data?.items ?? []) as SellerQueueItem[];
 
   return (
-    <div className="min-h-screen ">
-      <Header />
+    <PageShell>
+      <AdminPageShell activeHref={adminRoutes.verificationCenter}>
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Breadcrumb & Title */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <nav className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-              <Link href="/admin" className="flex items-center gap-1 hover:text-emerald-600 transition-colors">
+              <Link href={adminRoutes.dashboard} className="flex items-center gap-1 hover:text-emerald-600 transition-colors">
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Admin Dashboard
               </Link>
@@ -132,7 +134,8 @@ export default function AdminVerificationCenterPage() {
           </CardContent>
         </Card>
       </main>
-    </div>
+      </AdminPageShell>
+    </PageShell>
   );
 }
 
@@ -356,6 +359,7 @@ function DocumentPreview({ title, url, alt }: { title: string; url: string | nul
           width={400}
           height={128}
           className="h-32 w-full rounded object-cover bg-zinc-50 transition-transform duration-200 group-hover:scale-105"
+          unoptimized
         />
       </div>
     </div>

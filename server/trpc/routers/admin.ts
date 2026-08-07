@@ -140,6 +140,59 @@ export const adminRouter = createTRPCRouter({
       return { offering };
     }),
 
+  reviewList: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        limit: z.number().min(1).max(50).optional(),
+        cursor: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const limit = input.limit ?? 20;
+      const items = await prisma.review.findMany({
+        where: { deletedAt: null },
+        take: limit + 1,
+        ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: true,
+            },
+          },
+          product: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+          store: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      let nextCursor: string | undefined;
+      if (items.length > limit) {
+        const next = items.pop();
+        nextCursor = next?.id;
+      }
+
+      return {
+        items: items.map((review) => ({
+          ...review,
+          rating: Number(review.rating),
+        })),
+        nextCursor,
+      };
+    }),
+
   mySubscription: adminProcedure
     .use(withErrorHandling)
     .input(z.object({

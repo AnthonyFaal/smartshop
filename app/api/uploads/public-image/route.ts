@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { uploadPublicImage, getBucketForFileType } from "@/lib/storage/s3";
+import { uploadPublicImage, deleteFile, getBucketForFileType } from "@/lib/storage/s3";
 import { env } from "@/lib/config/env";
 import { getSessionUser } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/middleware/rate-limit";
@@ -54,18 +54,44 @@ export async function POST(req: Request) {
       ? getBucketForFileType(parsed.data.bucketType)
       : env.S3_BUCKET_UPLOADS;
 
-    const { publicUrl } = await uploadPublicImage({
+    const { publicUrl, storageKey } = await uploadPublicImage({
       bucket,
-      pathPrefix: `${parsed.data.bucketType}/${user.id}`,
+      pathPrefix: parsed.data.pathPrefix ? parsed.data.pathPrefix : `${parsed.data.bucketType}/${user.id}`,
       file,
     });
 
-    return NextResponse.json({ publicUrl });
+    return NextResponse.json({ publicUrl, bucket, storageKey });
   } catch (e) {
+    const message = e instanceof Error ? e.message : "Upload failed";
+    const status = message.includes("not configured") ? 503 : 500;
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Upload failed" },
-      { status: 500 }
+      { error: message },
+      { status }
     );
+  }
+}
+
+const deleteSchema = z.object({
+  bucket: z.string().min(1),
+  storageKey: z.string().min(1),
+});
+
+export async function DELETE(req: Request) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+
+  const body = await req.json().catch(() => null);
+  const parsed = deleteSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid delete parameters" }, { status: 400 });
+  }
+
+  try {
+    await deleteFile(parsed.data.bucket, parsed.data.storageKey);
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Delete failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

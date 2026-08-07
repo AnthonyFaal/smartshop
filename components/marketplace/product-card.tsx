@@ -56,6 +56,7 @@ export function ProductCard({ product }: ProductCardProps) {
             fill
             className="object-cover transition-transform group-hover:scale-105"
             sizes="(max-width:768px) 50vw, 25vw"
+            unoptimized
           />
           {discount && (
             <Badge className="absolute left-2 top-2" variant="destructive">

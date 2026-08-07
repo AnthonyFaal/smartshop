@@ -157,6 +157,7 @@ export default function GhanaCardVerifyPage() {
                       alt="Uploaded Ghana Card"
                       width={400}
                       height={240}
+                      unoptimized
                       className="mx-auto max-h-60 rounded-lg object-contain"
                     />
 

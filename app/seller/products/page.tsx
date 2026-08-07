@@ -301,6 +301,7 @@ export default function SellerProductsPage() {
                                   alt={product.title}
                                   fill
                                   className="object-cover"
+                                  unoptimized
                                 />
                               ) : (
                                 <Boxes className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-zinc-400" />

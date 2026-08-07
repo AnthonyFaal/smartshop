@@ -28,6 +28,12 @@ function getS3Client(): S3Client {
   return s3Client;
 }
 
+function ensureStorageConfigured(): void {
+  if (!env.S3_ENDPOINT || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) {
+    throw new Error("S3 storage is not configured");
+  }
+}
+
 export interface UploadUrlResult {
   uploadUrl: string;
   storageKey: string;
@@ -40,6 +46,7 @@ export async function generateUploadUrl(
   mimeType: string,
   isPublic = false
 ): Promise<UploadUrlResult> {
+  ensureStorageConfigured();
   const ext = filename.split(".").pop() ?? "bin";
   const storageKey = `${isPublic ? "public" : "private"}/${nanoid()}.${ext}`;
   const client = getS3Client();
@@ -90,6 +97,7 @@ function getFileInfo(input: UploadPublicImageInput): {
 export async function uploadPublicImage(
   input: UploadPublicImageInput
 ): Promise<{ publicUrl: string; storageKey: string; }> {
+  ensureStorageConfigured();
   const client = getS3Client();
 
   const { ext, mimeType } = getFileInfo(input);
@@ -130,6 +138,7 @@ export async function uploadPublicImage(
 export async function uploadPrivateImage(
   input: UploadPublicImageInput
 ): Promise<{ storageKey: string }> {
+  ensureStorageConfigured();
   const client = getS3Client();
   const { ext, mimeType } = getFileInfo(input);
   const safePrefix = input.pathPrefix.replace(/^\/+|\/+$/g, "");
@@ -154,6 +163,7 @@ export async function deleteFile(
   bucket: string,
   storageKey: string
 ): Promise<void> {
+  ensureStorageConfigured();
   const client = getS3Client();
   await client.send(
     new DeleteObjectCommand({ Bucket: bucket, Key: storageKey })
@@ -165,6 +175,7 @@ export async function getDownloadUrl(
   storageKey: string,
   expiresIn = 3600
 ): Promise<string> {
+  ensureStorageConfigured();
   const client = getS3Client();
   const command = new GetObjectCommand({ Bucket: bucket, Key: storageKey });
   return getSignedUrl(client, command, { expiresIn });

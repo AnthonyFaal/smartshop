@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc/client";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatMaxProductsDisplay } from "@/lib/config/subscriptions";
+import { adminRoutes } from "@/lib/admin/navigation";
 import Link from "next/link";
 
 const statCards = [
@@ -123,7 +124,7 @@ export default function AdminDashboardPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Subscription offerings</CardTitle>
               <Button asChild size="sm" variant="outline">
-                <Link href="/admin/subscriptions">Manage plans</Link>
+                <Link href={adminRoutes.subscriptions}>Manage plans</Link>
               </Button>
             </CardHeader>
             <CardContent>
@@ -226,7 +227,7 @@ export default function AdminDashboardPage() {
                               size="sm"
                               variant="outline"
                             >
-                              <Link href="/admin/verification">
+                              <Link href={adminRoutes.sellerReviews}>
                                 Review
                                 <ArrowRight className="ml-2 h-4 w-4" />
                               </Link>
@@ -256,16 +257,16 @@ export default function AdminDashboardPage() {
                     size="sm"
                     className="bg-emerald-600 hover:bg-emerald-700"
                   >
-                    <Link href="/admin/verification">Open review center</Link>
+                    <Link href={adminRoutes.verificationCenter}>Open review center</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/admin/verification/ghana-card">Ghana Card</Link>
+                    <Link href={`${adminRoutes.verificationCenter}/ghana-card`}>Ghana Card</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/admin/verification">Seller Verification</Link>
+                    <Link href={adminRoutes.verificationCenter}>Seller Verification</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/admin/subscriptions">Plans</Link>
+                    <Link href={adminRoutes.subscriptions}>Plans</Link>
                   </Button>
                 </div>
               </CardContent>

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { adminRoutes } from "@/lib/admin/navigation";
 
 type ReasonState = Record<string, string>;
 
@@ -47,7 +48,7 @@ export default function AdminGhanaCardReviewPage() {
           <div>
             <div className="flex items-center gap-2 text-sm text-zinc-600">
               <ArrowLeft className="h-4 w-4" />
-              <Link href="/admin/verification" className="hover:text-emerald-600">
+              <Link href={adminRoutes.verificationCenter} className="hover:text-emerald-600">
                 Verification Center
               </Link>
               <span aria-hidden="true">/</span>

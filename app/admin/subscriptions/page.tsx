@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { Save, Sparkles } from "lucide-react";
 import { SubscriptionPlan } from "@prisma/client";
 
-import { Header } from "@/components/layout/header";
+import { AdminPageShell } from "@/components/layout/admin-page-shell";
+import { PageShell } from "@/components/layout/page-shell";
+import { adminRoutes } from "@/lib/admin/navigation";
 import { trpc } from "@/lib/trpc/client";
 
 import { Badge } from "@/components/ui/badge";
@@ -125,9 +127,8 @@ export default function AdminSubscriptionPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col">
-      <Header />
-
+    <PageShell>
+      <AdminPageShell activeHref={adminRoutes.subscriptions}>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
 
         <div className="mb-8 flex items-center justify-between">
@@ -290,6 +291,7 @@ export default function AdminSubscriptionPage() {
           </div>
         )}
       </main>
-    </div>
+      </AdminPageShell>
+    </PageShell>
   );
 }

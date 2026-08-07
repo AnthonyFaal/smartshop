@@ -83,6 +83,18 @@ function parseEnv(): Env {
     DATABASE_URL:
       trimmedEnv.DATABASE_URL ??
       "postgresql://smartshop:smartshop@localhost:5432/smartshop",
+    S3_ENDPOINT:
+      trimmedEnv.S3_ENDPOINT ??
+      (trimmedEnv.NODE_ENV === "production" ? undefined : "http://localhost:9000"),
+    S3_ACCESS_KEY_ID:
+      trimmedEnv.S3_ACCESS_KEY_ID ??
+      (trimmedEnv.NODE_ENV === "production" ? undefined : "minioadmin"),
+    S3_SECRET_ACCESS_KEY:
+      trimmedEnv.S3_SECRET_ACCESS_KEY ??
+      (trimmedEnv.NODE_ENV === "production" ? undefined : "minioadmin"),
+    S3_PUBLIC_URL:
+      trimmedEnv.S3_PUBLIC_URL ??
+      (trimmedEnv.NODE_ENV === "production" ? undefined : "http://localhost:9000"),
     JWT_SECRET:
       trimmedEnv.JWT_SECRET ??
       "dev-only-secret-change-in-production-32chars!!",

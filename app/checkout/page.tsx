@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { CheckCircle, CreditCard, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { PageShell } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,10 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc/client";
+import { buildCheckoutSchema } from "@/lib/utils/checkout-payment";
 import { formatCurrency } from "@/lib/utils/format";
 import { useAuthUser } from "@/components/providers/auth-provider";
+import { z } from "zod";
 
 declare global {
   interface Window {
@@ -25,20 +27,7 @@ declare global {
   }
 }
 
-const checkoutSchema = z.object({
-  // Tarkwa-only defaults; shipping address line inputs are not shown in UI.
-  line1: z.string().min(1),
-  line2: z.string().optional(),
-  city: z.string().min(1),
-  region: z.string().min(1),
-  postalCode: z.string().optional(),
-  fulfillmentLocationId: z.string().uuid().optional(),
-  paymentMethod: z.enum(["MOBILE_MONEY", "CARD"]),
-  paymentPhone: z.string().trim().regex(/^\+?[0-9]{9,15}$/, "Enter a valid phone number"),
-  cardholderName: z.string().trim().optional(),
-  promoCode: z.string().trim().max(40).optional(),
-  notes: z.string().optional(),
-});
+const checkoutSchema = buildCheckoutSchema();
 
 type CheckoutForm = z.infer<typeof checkoutSchema>;
 
@@ -89,6 +78,7 @@ export default function CheckoutPage() {
       city: "Tarkwa",
       paymentMethod: "MOBILE_MONEY",
       paymentPhone: user?.phone ?? "",
+      mobileMoneyNetwork: "MTN",
       promoCode: "",
     },
   });
@@ -153,14 +143,19 @@ export default function CheckoutPage() {
   const total = subtotal + fee;
 
   const selectedPaymentMethod = useWatch({
-  control,
-  name: "paymentMethod",
-});
+    control,
+    name: "paymentMethod",
+  }) ?? "MOBILE_MONEY";
 
-const promoCode = useWatch({
-  control,
-  name: "promoCode",
-}) ?? "";
+  const selectedMobileNetwork = useWatch({
+    control,
+    name: "mobileMoneyNetwork",
+  }) ?? "MTN";
+
+  const promoCode = useWatch({
+    control,
+    name: "promoCode",
+  }) ?? "";
   const promotionPreview = trpc.order.previewPromotion.useQuery(
     { promoCode: promoCode.trim() },
     { enabled: Boolean(user && cart?.items.length && promoCode.trim().length >= 3), retry: false }
@@ -177,10 +172,14 @@ const promoCode = useWatch({
 
     setIsSubmitting(true);
     const { paymentMethod, paymentPhone, cardholderName, promoCode, notes, ...address } = data;
+    const normalizedPaymentPhone = paymentMethod === "MOBILE_MONEY"
+      ? (paymentPhone ?? "").trim()
+      : "";
+
     createOrder.mutate({
       shippingAddress: { ...address, country: "GH" },
       paymentMethod,
-      paymentPhone,
+      paymentPhone: normalizedPaymentPhone,
       cardholderName,
       promoCode,
       notes,
@@ -271,55 +270,147 @@ const promoCode = useWatch({
                 <CardHeader>
                   <CardTitle>Payment Method</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {[
-                    { value: "MOBILE_MONEY", label: "Mobile Money (MTN/Vodafone)" },
-                    { value: "CARD", label: "Debit/Credit Card" },
-                  ].map((method) => (
-                    <label
-                      key={method.value}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:bg-zinc-50"
-                    >
-                      <input
-                        type="radio"
-                        value={method.value}
-                        {...register("paymentMethod")}
-                        className="h-4 w-4 text-emerald-600"
-                      />
-                      <span className="text-sm">{method.label}</span>
-                    </label>
-                  ))}
-                  <div className="space-y-2 pt-2">
-                    <Label htmlFor="paymentPhone">Payment phone number</Label>
-                    <Input
-                      id="paymentPhone"
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      placeholder="+233 24 123 4567"
-                      {...register("paymentPhone")}
-                    />
-                    {errors.paymentPhone ? (
-                      <p className="text-xs text-red-600">{errors.paymentPhone.message}</p>
-                    ) : null}
-                    <p className="text-xs text-zinc-500">
-                      Used for mobile-money authorization. Card details are never entered on SmartShop.
+                <CardContent className="space-y-5">
+                  <fieldset className="space-y-3">
+                    <legend className="sr-only">Choose your payment method</legend>
+                    {[
+                      {
+                        value: "MOBILE_MONEY",
+                        title: "Mobile Money",
+                        subtitle: "Pay with MTN or Telecel Cash",
+                        icon: <Smartphone className="h-5 w-5 text-zinc-700" />,
+                      },
+                      {
+                        value: "CARD",
+                        title: "Debit / Credit Card",
+                        subtitle: "Visa, Mastercard",
+                        icon: <CreditCard className="h-5 w-5 text-zinc-700" />,
+                      },
+                    ].map((method) => {
+                      const isSelected = selectedPaymentMethod === method.value;
+
+                      return (
+                        <label
+                          key={method.value}
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-all duration-200 ${
+                            isSelected
+                              ? "border-2 border-emerald-500 shadow-sm"
+                              : "border-zinc-200 hover:border-zinc-300"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            value={method.value}
+                            {...register("paymentMethod")}
+                            className="sr-only"
+                          />
+                          <div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${isSelected ? "border-emerald-500" : "border-zinc-300"}`}>
+                            {isSelected ? (
+                              <CheckCircle className="h-5 w-5 text-emerald-600" />
+                            ) : (
+                              <div className="h-2.5 w-2.5 rounded-full bg-zinc-300" />
+                            )}
+                          </div>
+                          <div className="flex flex-1 items-start gap-3">
+                            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${isSelected ? "border-emerald-500/30" : "border-zinc-200"}`}>
+                              {method.icon}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-zinc-900">{method.title}</p>
+                              <p className="mt-1 text-sm text-zinc-500">{method.subtitle}</p>
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </fieldset>
+
+                  <div
+                    className={`overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out ${
+                      selectedPaymentMethod === "MOBILE_MONEY"
+                        ? "max-h-80 translate-y-0 opacity-100"
+                        : "max-h-0 -translate-y-2 opacity-0"
+                    }`}
+                  >
+                    <div className="space-y-4 rounded-xl border border-zinc-200 p-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="mobileMoneyNetwork">Mobile Network</Label>
+                        <Select id="mobileMoneyNetwork" {...register("mobileMoneyNetwork")}>
+                          <option value="MTN">MTN</option>
+                          <option value="TELECEL_CASH">Telecel Cash</option>
+                        </Select>
+                        {errors.mobileMoneyNetwork ? (
+                          <p className="text-xs text-red-600">{errors.mobileMoneyNetwork.message}</p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="paymentPhone">Phone Number</Label>
+                        <Input
+                          id="paymentPhone"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          placeholder="+233 24 123 4567"
+                          {...register("paymentPhone")}
+                        />
+                        {errors.paymentPhone ? (
+                          <p className="text-xs text-red-600">{errors.paymentPhone.message}</p>
+                        ) : null}
+                        <p className="text-xs text-zinc-500">
+                          Used for mobile-money authorization. Card details are never entered on SmartShop.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className={`overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out ${
+                      selectedPaymentMethod === "CARD"
+                        ? "max-h-[24rem] translate-y-0 opacity-100"
+                        : "max-h-0 -translate-y-2 opacity-0"
+                    }`}
+                  >
+                    <div className="space-y-4 rounded-xl border border-zinc-200 p-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="cardNumber">Card Number</Label>
+                        <Input id="cardNumber" placeholder="4242 4242 4242 4242" readOnly />
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="cardExpiry">Expiry Date</Label>
+                          <Input id="cardExpiry" placeholder="MM/YY" readOnly />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cardCvv">CVV</Label>
+                          <Input id="cardCvv" placeholder="123" readOnly />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="cardholderName">Cardholder Name</Label>
+                        <Input
+                          id="cardholderName"
+                          autoComplete="cc-name"
+                          placeholder="Name as shown on card"
+                          {...register("cardholderName")}
+                        />
+                        {errors.cardholderName ? (
+                          <p className="text-xs text-red-600">{errors.cardholderName.message}</p>
+                        ) : null}
+                        <p className="text-xs text-zinc-500">
+                          Card number, expiry, and CVV are entered securely on Paystack’s hosted payment page.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4">
+                    <p className="text-sm text-zinc-700">
+                      {selectedPaymentMethod === "MOBILE_MONEY"
+                        ? `You'll pay ${formatCurrency(displayedTotal)} via ${selectedMobileNetwork === "TELECEL_CASH" ? "Telecel Cash" : "MTN"} Mobile Money.`
+                        : `You'll pay ${formatCurrency(displayedTotal)} using your Debit/Credit Card.`}
                     </p>
                   </div>
-                  {selectedPaymentMethod === "CARD" ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="cardholderName">Name on card</Label>
-                      <Input
-                        id="cardholderName"
-                        autoComplete="cc-name"
-                        placeholder="Name as shown on card"
-                        {...register("cardholderName")}
-                      />
-                      <p className="text-xs text-zinc-500">
-                        Card number, expiry, and CVC are entered securely on Paystack’s hosted payment page.
-                      </p>
-                    </div>
-                  ) : null}
+
                   <div className="space-y-2 pt-2">
                     <Label htmlFor="promoCode">Discount code</Label>
                     <Input id="promoCode" placeholder="Optional code" {...register("promoCode")} />
@@ -352,6 +443,7 @@ const promoCode = useWatch({
                           fill
                           className="object-cover"
                           sizes="56px"
+                          unoptimized
                         />
                       )}
                     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -96,7 +96,8 @@ export default function SellerProductNewPage() {
 
   // State
   const [form, setForm] = useState<CreateProductForm>(initialForm);
-  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -165,39 +166,33 @@ export default function SellerProductNewPage() {
   /* -----------------------------
      IMAGE UPLOAD
   ------------------------------*/
-  const handleUploadImages = async (files: FileList | null) => {
+  const handleSelectImages = (files: FileList | null) => {
     if (!files?.length) return;
 
-    setUploading(true);
     setError(null);
+    const nextFiles = Array.from(files);
 
-    try {
-      const uploaded: string[] = [];
-
-      for (const file of Array.from(files)) {
-        const data = new FormData();
-        data.append("file", file);
-        data.append("pathPrefix", "product-images");
-        data.append("bucketType", "product");
-
-        const res = await fetch("/api/uploads/public-image", {
-          method: "POST",
-          body: data,
-        });
-
-        if (!res.ok) throw new Error("Upload failed");
-
-        const json = await res.json();
-        uploaded.push(json.publicUrl);
-      }
-
-      setUploadedImages((c) => [...c, ...uploaded]);
-    } catch (e: unknown) {
-      setError(getErrorMessage(e, "Upload error"));
-    } finally {
-      setUploading(false);
-    }
+    setPreviewUrls((current) => {
+      current.forEach(URL.revokeObjectURL);
+      return nextFiles.map((file) => URL.createObjectURL(file));
+    });
+    setSelectedFiles(nextFiles);
   };
+
+  const removeSelectedImage = (index: number) => {
+    setSelectedFiles((current) => current.filter((_, i) => i !== index));
+    setPreviewUrls((current) => {
+      const next = current.filter((_, i) => i !== index);
+      if (current[index]) URL.revokeObjectURL(current[index]);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach(URL.revokeObjectURL);
+    };
+  }, [previewUrls]);
 
   /* -----------------------------
      AI DESCRIPTION
@@ -322,17 +317,15 @@ export default function SellerProductNewPage() {
       return;
     }
 
-    const images = [
-      ...uploadedImages,
-      ...form.imageUrls
-        .split(/\n|,/)
-        .map((s) => s.trim())
-        .filter(Boolean),
-    ];
+    const externalImages = form.imageUrls
+      .split(/\n|,/) 
+      .map((s) => s.trim())
+      .filter(Boolean);
 
-    const sku = form.sku?.trim() || generateSku(form.title, selectedStoreId);
-
-    const sizesQuantities = noSizes
+    const uploadedFiles: Array<{ bucket: string; storageKey: string; publicUrl: string }> = [];
+    let uploadedImageUrls: string[] = [];
+    let images: string[] = [];
+    let sizesQuantities = noSizes
       ? undefined
       : variants
           .filter((v) => v.size.trim() !== "")
@@ -355,7 +348,40 @@ export default function SellerProductNewPage() {
       }
     }
 
+    setUploading(true);
     try {
+      if (selectedFiles.length > 0) {
+        uploadedImageUrls = await Promise.all(
+          selectedFiles.map(async (file) => {
+            const data = new FormData();
+            data.append("file", file);
+            data.append("pathPrefix", "product-images");
+            data.append("bucketType", "product");
+
+            const res = await fetch("/api/uploads/public-image", {
+              method: "POST",
+              body: data,
+            });
+
+            if (!res.ok) {
+              const json = await res.json().catch(() => null);
+              throw new Error(json?.error || `Failed to upload ${file.name}`);
+            }
+
+            const json = await res.json();
+            uploadedFiles.push({
+              bucket: json.bucket,
+              storageKey: json.storageKey,
+              publicUrl: json.publicUrl,
+            });
+            return json.publicUrl as string;
+          })
+        );
+      }
+
+      images = [...uploadedImageUrls, ...externalImages];
+      const sku = form.sku?.trim() || generateSku(form.title, selectedStoreId);
+
       await createProduct.mutateAsync({
         storeId: selectedStoreId,
         categoryId: form.categoryId || undefined,
@@ -376,11 +402,28 @@ export default function SellerProductNewPage() {
       setSuccess("Product created successfully.");
       setForm(initialForm);
       setVariants([{ size: "S", quantity: 1 }]);
-      setUploadedImages([]);
-
+      setSelectedFiles([]);
+      previewUrls.forEach(URL.revokeObjectURL);
+      setPreviewUrls([]);
       router.push("/seller/products");
     } catch (e: unknown) {
+      if (uploadedFiles.length > 0) {
+        await Promise.all(
+          uploadedFiles.map(async (uploaded) => {
+            await fetch("/api/uploads/public-image", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                bucket: uploaded.bucket,
+                storageKey: uploaded.storageKey,
+              }),
+            }).catch(() => null);
+          })
+        );
+      }
       setError(getErrorMessage(e, "Create failed"));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -696,39 +739,61 @@ export default function SellerProductNewPage() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  <label className="block cursor-pointer rounded-xl border border-dashed p-4 text-center hover:bg-zinc-50 transition-colors">
-                    <div className="flex justify-center mb-2">
-                      <Plus className="text-zinc-400" />
-                    </div>
-                    <p className="text-sm font-medium">Upload images</p>
+                  <div className="space-y-2">
+                  <Label>Product images</Label>
+                  <p className="text-sm text-zinc-500">
+                    Select up to 10 images. They will upload when you create the product.
+                  </p>
+                  <div>
                     <input
+                      id="product-images"
                       type="file"
-                      hidden
                       multiple
                       accept="image/*"
-                      onChange={(e) => handleUploadImages(e.target.files)}
+                      className="sr-only"
+                      onChange={(e) => handleSelectImages(e.target.files)}
                     />
-                  </label>
+                    <label
+                      htmlFor="product-images"
+                      className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 py-4 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                    >
+                      <Plus className="h-4 w-4 text-zinc-400" />
+                      {selectedFiles.length > 0
+                        ? `Replace ${selectedFiles.length} selected image${selectedFiles.length === 1 ? "" : "s"}`
+                        : "Select images"}
+                    </label>
+                  </div>
+                </div>
 
-                  {uploading && <p className="text-sm text-zinc-500 text-center">Uploading...</p>}
+                {uploading && (
+                  <p className="text-sm text-zinc-500 text-center">Uploading...</p>
+                )}
 
-                  {uploadedImages.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {uploadedImages.map((url) => (
-                        <div
-                          key={url}
-                          className="relative h-24 w-full overflow-hidden rounded-md border"
+                {previewUrls.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {previewUrls.map((url, index) => (
+                      <div
+                        key={url}
+                        className="group relative h-24 w-full overflow-hidden rounded-md border border-zinc-200"
+                      >
+                        <Image
+                          src={url}
+                          alt={`Selected product preview ${index + 1}`}
+                          fill
+                          className="object-cover"
+                          unoptimized
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSelectedImage(index)}
+                          className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-zinc-600 shadow-sm transition hover:text-red-600"
                         >
-                          <Image
-                            src={url}
-                            alt="Uploaded product preview"
-                            fill
-                            className="object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 </CardContent>
               </Card>
 

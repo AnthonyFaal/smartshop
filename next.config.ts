@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
         protocol: "http",
         hostname: "localhost",
         port: "9000",
-        pathname: "/smartshop-uploads/**",
+        pathname: "/smartshop-products/**",
       },
     ],
   },

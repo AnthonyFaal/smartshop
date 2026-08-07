@@ -153,7 +153,7 @@ export default function ProductDetailPage() {
                 fill
                 className="object-cover"
                 priority
-                              />
+                unoptimized/>
             </div>
 
             {product.images.length > 1 && (
@@ -185,7 +185,7 @@ export default function ProductDetailPage() {
                         alt=""
                         fill
                         className="object-cover"
-                        
+                        unoptimized
                       />
                     </button>
                   ))}
