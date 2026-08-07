@@ -15,10 +15,10 @@ import { Badge } from "@/components/ui/badge";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { data: user } = trpc.auth.me.useQuery();
+  const { user: contextUser, updateAuthUser } = useAuthUser();
+  const { data: queriedUser } = trpc.auth.me.useQuery();
+  const user = queriedUser ?? contextUser ?? null;
   const utils = trpc.useUtils();
-
-  const { updateAuthUser } = useAuthUser();
 
   const logout = trpc.auth.logout.useMutation({
     onSuccess: async () => {

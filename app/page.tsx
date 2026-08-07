@@ -1,8 +1,5 @@
-import Link from "next/link";
 import { Shield, Sparkles, MapPin, Star } from "lucide-react";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
-import { VerificationBanner } from "@/components/auth/verification-banner";
+import { PageShell } from "@/components/layout/page-shell";
 import { LandingHeroCTA, LandingBottomCTA } from "@/components/marketing/landing-cta";
 
 const features = [
@@ -10,7 +7,7 @@ const features = [
     icon: Shield,
     title: "Verified Sellers",
     description:
-      "Every seller passes Ghana Card verification, selfie check, and GPS location validation.",
+      "Every seller passes Ghana Card and selfie verification before their store is marked VERIFIED.",
   },
   {
     icon: Sparkles,
@@ -34,9 +31,7 @@ const features = [
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-full flex-col">
-      <Header />
-      <VerificationBanner />
+    <PageShell>
       <main className="flex-1">
         <section className="relative overflow-hidden bg-gradient-to-b from-emerald-50 to-white px-4 py-20 sm:px-6 lg:py-32">
           <div className="mx-auto max-w-7xl">
@@ -91,7 +86,6 @@ export default function LandingPage() {
           </div>
         </section>
       </main>
-      <Footer />
-    </div>
+    </PageShell>
   );
 }

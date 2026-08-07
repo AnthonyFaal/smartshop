@@ -1,57 +1,47 @@
+
 "use client";
 
-import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc/client";
 import { ProductCard } from "@/components/marketplace/product-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-
 interface ProductGridProps {
   search?: string;
   categoryId?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sortBy?: "createdAt" | "price" | "rating" | "soldCount";
+  sortOrder?: "asc" | "desc";
 }
 
-type ProductItem = {
-  id: string;
-  title: string;
-  slug: string;
-  price: { toString(): string } | number;
-  images: string[];
-  rating: { toString(): string } | number;
-  comparePrice?: { toString(): string } | number | null;
-  store: {
-    name: string;
-    slug: string;
-    isVerified: boolean;
-  };
-};
 
-export function ProductGrid({ search, categoryId }: ProductGridProps) {
-  const [cursor, setCursor] = useState<string | undefined>();
-  const [allProducts, setAllProducts] = useState<ProductItem[]>([]);
+export function ProductGrid({
+  search,
+  categoryId,
+  minPrice,
+  maxPrice,
+  sortBy,
+  sortOrder,
+}: ProductGridProps) {
+  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } =
+    trpc.product.list.useInfiniteQuery(
+      {
+        search,
+        categoryId,
+        minPrice,
+        maxPrice,
+        sortBy,
+        sortOrder,
+        limit: 20,
+      },
+      {
+        getNextPageParam: (lastPage) => lastPage.nextCursor,
+      }
+    );
 
-  const { data, isLoading, isFetching } = trpc.product.list.useQuery({
-    search,
-    categoryId,
-    limit: 20,
-    cursor,
-  });
+  const products = data?.pages.flatMap((page) => page.products) ?? [];
 
-  useEffect(() => {
-    if (!data) return;
-    if (!cursor) {
-      setAllProducts(data.products as ProductItem[]);
-    } else {
-      setAllProducts((prev) => [...prev, ...(data.products as ProductItem[])]);
-    }
-  }, [data, cursor]);
-
-  useEffect(() => {
-    setCursor(undefined);
-    setAllProducts([]);
-  }, [search, categoryId]);
-
-  if (isLoading && allProducts.length === 0) {
+  if (isLoading && products.length === 0) {
     return (
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
         {Array.from({ length: 8 }).map((_, i) => (
@@ -64,8 +54,6 @@ export function ProductGrid({ search, categoryId }: ProductGridProps) {
       </div>
     );
   }
-
-  const products = cursor ? allProducts : (data?.products ?? []);
 
   if (products.length === 0) {
     return (
@@ -85,14 +73,14 @@ export function ProductGrid({ search, categoryId }: ProductGridProps) {
           <ProductCard key={product.id} product={product} />
         ))}
       </div>
-      {data?.nextCursor && (
+      {hasNextPage && (
         <div className="flex justify-center">
           <Button
             variant="outline"
-            onClick={() => setCursor(data.nextCursor)}
-            disabled={isFetching}
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
           >
-            {isFetching ? "Loading..." : "Load more"}
+            {isFetchingNextPage ? "Loading..." : "Load more"}
           </Button>
         </div>
       )}

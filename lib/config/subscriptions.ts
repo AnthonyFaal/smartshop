@@ -82,7 +82,7 @@ export const SUBSCRIPTION_LIMITS = {
   },
 
   [SubscriptionPlan.STARTER]: {
-    maxProducts: 200,
+    maxProducts: 50,
     aiTier: "standard" as const,
     analytics: true,
     promotions: false,
@@ -93,7 +93,7 @@ export const SUBSCRIPTION_LIMITS = {
   },
 
   [SubscriptionPlan.BUSINESS]: {
-    maxProducts: 10000000,
+    maxProducts: 150,
     aiTier: "advanced" as const,
     analytics: true,
     promotions: true,
@@ -158,6 +158,10 @@ export function formatMaxProductsDisplay(value: number | null | undefined) {
   if (value === null || value === undefined) return "Infinity";
   if (value >= 1000000) return "Infinity";
   return String(value);
+}
+
+export function canUseAiFeatures(plan: SubscriptionPlan) {
+  return plan !== SubscriptionPlan.FREE;
 }
 
 export function normalizeSubscriptionOffering(offering: {

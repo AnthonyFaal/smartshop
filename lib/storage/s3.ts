@@ -28,6 +28,12 @@ function getS3Client(): S3Client {
   return s3Client;
 }
 
+function ensureStorageConfigured(): void {
+  if (!env.S3_ENDPOINT || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) {
+    throw new Error("S3 storage is not configured");
+  }
+}
+
 export interface UploadUrlResult {
   uploadUrl: string;
   storageKey: string;
@@ -40,6 +46,7 @@ export async function generateUploadUrl(
   mimeType: string,
   isPublic = false
 ): Promise<UploadUrlResult> {
+  ensureStorageConfigured();
   const ext = filename.split(".").pop() ?? "bin";
   const storageKey = `${isPublic ? "public" : "private"}/${nanoid()}.${ext}`;
   const client = getS3Client();
@@ -87,14 +94,10 @@ function getFileInfo(input: UploadPublicImageInput): {
   return { ext: "jpg", mimeType: "image/jpeg" };
 }
 
-function toUint8Array(data: Buffer | ArrayBuffer): Uint8Array {
-  if (data instanceof Uint8Array) return data;
-  return new Uint8Array(data);
-}
-
 export async function uploadPublicImage(
   input: UploadPublicImageInput
 ): Promise<{ publicUrl: string; storageKey: string; }> {
+  ensureStorageConfigured();
   const client = getS3Client();
 
   const { ext, mimeType } = getFileInfo(input);
@@ -110,9 +113,13 @@ export async function uploadPublicImage(
     const arrayBuffer = await input.file.arrayBuffer();
     body = Buffer.from(arrayBuffer);
   } else {
-    body = Buffer.isBuffer(input.file)
-      ? input.file
-      : Buffer.from(input.file as any);
+    if (Buffer.isBuffer(input.file)) {
+      body = input.file;
+    } else if (typeof input.file === "object" && "arrayBuffer" in input.file) {
+      body = Buffer.from(await input.file.arrayBuffer());
+    } else {
+      body = Buffer.from(input.file as unknown as Uint8Array);
+    }
   }
 
   await client.send(
@@ -128,11 +135,35 @@ export async function uploadPublicImage(
   return { publicUrl, storageKey };
 }
 
+export async function uploadPrivateImage(
+  input: UploadPublicImageInput
+): Promise<{ storageKey: string }> {
+  ensureStorageConfigured();
+  const client = getS3Client();
+  const { ext, mimeType } = getFileInfo(input);
+  const safePrefix = input.pathPrefix.replace(/^\/+|\/+$/g, "");
+  const storageKey = `private/${safePrefix}/${nanoid()}.${ext}`;
+  const body = typeof File !== "undefined" && input.file instanceof File
+    ? Buffer.from(await input.file.arrayBuffer())
+    : Buffer.isBuffer(input.file)
+      ? input.file
+      : Buffer.from(input.file as unknown as Uint8Array);
+
+  await client.send(new PutObjectCommand({
+    Bucket: input.bucket,
+    Key: storageKey,
+    ContentType: mimeType,
+    Body: body,
+  }));
+  return { storageKey };
+}
+
 
 export async function deleteFile(
   bucket: string,
   storageKey: string
 ): Promise<void> {
+  ensureStorageConfigured();
   const client = getS3Client();
   await client.send(
     new DeleteObjectCommand({ Bucket: bucket, Key: storageKey })
@@ -144,6 +175,7 @@ export async function getDownloadUrl(
   storageKey: string,
   expiresIn = 3600
 ): Promise<string> {
+  ensureStorageConfigured();
   const client = getS3Client();
   const command = new GetObjectCommand({ Bucket: bucket, Key: storageKey });
   return getSignedUrl(client, command, { expiresIn });

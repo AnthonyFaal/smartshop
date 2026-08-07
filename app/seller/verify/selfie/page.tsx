@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 
 type Challenge = "BLINK" | "SMILE" | "TURN_LEFT" | "TURN_RIGHT";
+type FacePoint = { x: number; y: number; z?: number };
 
 const ALL_CHALLENGES: Challenge[] = [
   "BLINK",
@@ -47,7 +48,7 @@ export default function SelfieVerifyPage() {
   const challengeRef = useRef<Challenge[]>([]);
   const indexRef = useRef(0);
 
-  const [challenge, setChallenge] = useState<Challenge[]>([]);
+  const [challenge] = useState<Challenge[]>(randomChallenges);
   const [index, setIndex] = useState(0);
 
   const [cameraReady, setCameraReady] = useState(false);
@@ -55,8 +56,7 @@ export default function SelfieVerifyPage() {
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState("");
 
-  const current =
-    challengeRef.current[indexRef.current] ?? "BLINK";
+  const current = challenge[index] ?? "BLINK";
 
 
   const label = useMemo(() => {
@@ -80,11 +80,8 @@ export default function SelfieVerifyPage() {
 
 
   useEffect(() => {
-    const c = randomChallenges();
-
-    challengeRef.current = c;
-    setChallenge(c);
-  }, []);
+    challengeRef.current = challenge;
+  }, [challenge]);
 
 
   async function setup() {
@@ -157,7 +154,7 @@ export default function SelfieVerifyPage() {
 
 
   useEffect(() => {
-    setup();
+    queueMicrotask(() => { void setup(); });
 
     return () => {
       runningRef.current = false;
@@ -205,7 +202,7 @@ export default function SelfieVerifyPage() {
 
 
 
-  function detectFace(points: any[]) {
+  function detectFace(points: FacePoint[]) {
 
     if (busyRef.current)
       return;
@@ -532,13 +529,8 @@ export default function SelfieVerifyPage() {
 
                   const data = new FormData();
                   data.append("file", selfieFile);
-                  data.append(
-                    "pathPrefix",
-                    "seller-verification/selfie"
-                  );
-
                   const res = await fetch(
-                    "/api/uploads/public-image",
+                    "/api/uploads/verification-document",
                     {
                       method: "POST",
                       body: data,
@@ -550,11 +542,11 @@ export default function SelfieVerifyPage() {
                   }
 
                   const json = (await res.json()) as {
-                    publicUrl: string;
+                    documentUrl: string;
                   };
 
                   await mutation.mutateAsync({
-                    selfieUrl: json.publicUrl,
+                    selfieUrl: json.documentUrl,
                   });
 
 

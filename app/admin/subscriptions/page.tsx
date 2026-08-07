@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Save, Sparkles } from "lucide-react";
 import { SubscriptionPlan } from "@prisma/client";
 
-import { Header } from "@/components/layout/header";
+import { AdminPageShell } from "@/components/layout/admin-page-shell";
+import { PageShell } from "@/components/layout/page-shell";
+import { adminRoutes } from "@/lib/admin/navigation";
 import { trpc } from "@/lib/trpc/client";
 
 import { Badge } from "@/components/ui/badge";
@@ -56,16 +58,9 @@ export default function AdminSubscriptionPage() {
       },
     });
 
-  const [plans, setPlans] = useState<
-    Record<string, OfferingForm>
-  >({});
-
-  useEffect(() => {
-    if (!data?.offerings) return;
-
+  const loadedPlans = useMemo(() => {
     const next: Record<string, OfferingForm> = {};
-
-    for (const item of data.offerings) {
+    for (const item of data?.offerings ?? []) {
       next[item.tier] = {
         id: item.id,
         tier: item.tier,
@@ -81,21 +76,26 @@ export default function AdminSubscriptionPage() {
       };
     }
 
-    setPlans(next);
+    return next;
   }, [data]);
+  const [draftPlans, setDraftPlans] = useState<Record<string, OfferingForm> | null>(null);
+  const plans = draftPlans ?? loadedPlans;
 
   function change(
     tier: SubscriptionPlan,
     field: keyof OfferingForm,
-    value: any
+    value: string | number | boolean | null
   ) {
-    setPlans((current) => ({
-      ...current,
+    setDraftPlans((current) => {
+      const base = current ?? loadedPlans;
+      return {
+      ...base,
       [tier]: {
-        ...current[tier],
+        ...base[tier],
         [field]: value,
       },
-    }));
+      };
+    });
   }
 
   function save(tier: SubscriptionPlan) {
@@ -127,9 +127,8 @@ export default function AdminSubscriptionPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col">
-      <Header />
-
+    <PageShell>
+      <AdminPageShell activeHref={adminRoutes.subscriptions}>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
 
         <div className="mb-8 flex items-center justify-between">
@@ -292,6 +291,7 @@ export default function AdminSubscriptionPage() {
           </div>
         )}
       </main>
-    </div>
+      </AdminPageShell>
+    </PageShell>
   );
 }

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { adminRoutes } from "@/lib/admin/navigation";
 
 type ReasonState = Record<string, string>;
 
@@ -25,8 +26,6 @@ type SellerQueueItemUser = {
 type SellerQueueItem = {
   id: string;
   ghanaCardFrontUrl?: string | null;
-  ghanaCardBackUrl?: string | null;
-  ghanaCardNumber?: string | null;
   user?: SellerQueueItemUser | null;
 };
 
@@ -49,7 +48,7 @@ export default function AdminGhanaCardReviewPage() {
           <div>
             <div className="flex items-center gap-2 text-sm text-zinc-600">
               <ArrowLeft className="h-4 w-4" />
-              <Link href="/admin/verification" className="hover:text-emerald-600">
+              <Link href={adminRoutes.verificationCenter} className="hover:text-emerald-600">
                 Verification Center
               </Link>
               <span aria-hidden="true">/</span>
@@ -104,9 +103,8 @@ export default function AdminGhanaCardReviewPage() {
                     key={item.id}
                     verificationId={item.id}
                     userDisplay={item.user?.profile?.displayName ?? item.user?.email ?? "Seller applicant"}
-                    ghanaNumber={item.ghanaCardNumber ?? "—"}
                     frontUrl={item.ghanaCardFrontUrl ?? "—"}
-                    backUrl={item.ghanaCardBackUrl ?? null}
+                    backUrl={null}
                     reason={reasonById[item.id] ?? ""}
                     setReason={(v) =>
                       setReasonById((prev) => ({ ...prev, [item.id]: v }))
@@ -125,7 +123,6 @@ export default function AdminGhanaCardReviewPage() {
 function GhanaCardRow({
   verificationId,
   userDisplay,
-  ghanaNumber,
   frontUrl,
   backUrl,
   reason,
@@ -133,7 +130,6 @@ function GhanaCardRow({
 }: {
   verificationId: string;
   userDisplay: string;
-  ghanaNumber: string;
   frontUrl: string;
   backUrl: string | null;
   reason: string;
@@ -168,10 +164,7 @@ function GhanaCardRow({
     <div className="rounded-lg border border-zinc-200 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="font-medium text-zinc-900 truncate">{userDisplay}</p>
-          <p className="mt-1 text-sm text-zinc-500">
-            GH Card: {ghanaNumber || "—"}
-          </p>
+          <p className="font-medium text-zinc-900 truncate">{userDisplay}</p>         
           <div className="mt-2 space-y-1">
             <p className="text-xs text-zinc-500">Front URL</p>
             <p className="break-all text-xs text-zinc-700">{frontUrl}</p>

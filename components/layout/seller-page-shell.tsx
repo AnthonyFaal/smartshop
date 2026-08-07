@@ -74,7 +74,7 @@ export function SellerPageShell({
               aria-hidden
             />
             <aside
-              className="absolute left-0 top-0 h-full w-[85%] max-w-xs bg-white shadow-lg"
+              className="absolute left-0 top-0 h-full w-[85%] max-w-xs overflow-y-auto bg-white shadow-lg"
               aria-label="Seller navigation"
             >
               <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
@@ -117,7 +117,7 @@ export function SellerPageShell({
             </aside>
           </div>
         ) : (
-          <div className="fixed left-4 top-4 z-40">
+          <div className="fixed left-4 top-16 z-50">
             <Button
               variant="outline"
               size="icon"

@@ -9,7 +9,6 @@ export interface SellerVerificationSummaryInput {
   phoneVerified: boolean;
   hasGhanaCard: boolean;
   hasSelfie: boolean;
-  hasLocation: boolean;
   status?: SellerVerificationReviewStatus | null;
 }
 
@@ -28,10 +27,10 @@ export function getSellerVerificationSummary(
     { key: "phone", label: "Phone verification", complete: input.phoneVerified },
     { key: "ghanaCard", label: "Ghana Card", complete: input.hasGhanaCard },
     { key: "selfie", label: "Selfie verification", complete: input.hasSelfie },
-    { key: "location", label: "Campus location", complete: input.hasLocation },
   ];
 
   const completedCount = steps.filter((step) => step.complete).length;
+
   const progress = Math.round((completedCount / steps.length) * 100);
   const pendingSteps = steps.filter((step) => !step.complete).map((step) => step.label);
 
@@ -47,6 +46,7 @@ export function getSellerVerificationSummary(
             : progress === 100
               ? "Pending review"
               : "Pending";
+
 
   return {
     completedCount,

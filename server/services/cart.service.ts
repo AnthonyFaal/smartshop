@@ -16,6 +16,9 @@ export async function getCart(userId: string) {
               stock: true,
               status: true,
               slug: true,
+              variants: {
+                select: { size: true, quantity: true },
+              },
               store: { select: { name: true, slug: true } },
             },
           },
@@ -40,6 +43,7 @@ export async function getCart(userId: string) {
                 stock: true,
                 status: true,
                 slug: true,
+                variants: { select: { size: true, quantity: true } },
                 store: { select: { name: true, slug: true } },
               },
             },
@@ -55,39 +59,58 @@ export async function getCart(userId: string) {
 export async function addToCart(
   userId: string,
   productId: string,
-  quantity = 1
+  items: Array<{ quantity: number; selectedSize?: string }>
 ) {
   const product = await prisma.product.findFirst({
     where: { id: productId, status: "ACTIVE", deletedAt: null },
+    include: { variants: true },
   });
+
   if (!product) throw Errors.notFound("Product");
-  if (product.stock < quantity) {
-    throw Errors.badRequest("Insufficient stock");
-  }
 
-  const cart = await prisma.cart.upsert({
-    where: { userId },
-    create: { userId },
-    update: {},
-  });
-
-  const existing = await prisma.cartItem.findUnique({
-    where: { cartId_productId: { cartId: cart.id, productId } },
-  });
-
-  if (existing) {
-    const newQty = existing.quantity + quantity;
-    if (product.stock < newQty) {
-      throw Errors.badRequest("Insufficient stock");
-    }
-    return prisma.cartItem.update({
-      where: { id: existing.id },
-      data: { quantity: newQty },
+  return await prisma.$transaction(async (tx) => {
+    const cart = await tx.cart.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
     });
-  }
 
-  return prisma.cartItem.create({
-    data: { cartId: cart.id, productId, quantity },
+    for (const item of items) {
+      const qty = item.quantity;
+      const size = item.selectedSize?.trim() ?? "";
+      
+      const variants = product.variants as Array<{ size: string; quantity: number }>;
+      const hasVariants = variants.length > 0;
+
+      // Validation
+      if (hasVariants) {
+        if (!size) throw Errors.badRequest("Select a size");
+        const inv = variants.find((x) => x.size === size);
+        if (!inv || inv.quantity < qty) throw Errors.badRequest(`Insufficient stock for ${size}`);
+      } else if (product.stock < qty) {
+        throw Errors.badRequest("Insufficient stock");
+      }
+
+      const existing = await tx.cartItem.findUnique({
+        where: { cartId_productId_selectedSize: { cartId: cart.id, productId, selectedSize: size } },
+        select: { quantity: true },
+      });
+      if (hasVariants) {
+        const inv = variants.find((x) => x.size === size);
+        if (!inv || (existing?.quantity ?? 0) + qty > inv.quantity) throw Errors.badRequest(`Insufficient stock for ${size}`);
+      } else if ((existing?.quantity ?? 0) + qty > product.stock) {
+        throw Errors.badRequest("Insufficient stock");
+      }
+
+      // Upsert logic (Requires unique index on [cartId, productId, selectedSize])
+      await tx.cartItem.upsert({
+        where: {
+          cartId_productId_selectedSize: { cartId: cart.id, productId, selectedSize: size },
+        },
+        create: { cartId: cart.id, productId, quantity: qty, selectedSize: size },
+        update: { quantity: { increment: qty } },
+      });
+    }
   });
 }
 
@@ -105,8 +128,33 @@ export async function updateCartItem(
     await prisma.cartItem.delete({ where: { id: itemId } });
     return null;
   }
-  if (item.product.stock < quantity) {
-    throw Errors.badRequest("Insufficient stock");
+  // If this product has per-size variants, validate against selectedSize inventory.
+  // CartItem always stores selectedSize (default ""), so we use it when available.
+  const variants = (item.product as { variants?: Array<{ size: string; quantity: number }> })
+    .variants;
+
+  const productHasVariants = Array.isArray(variants) && variants.length > 0;
+
+  if (productHasVariants) {
+    const normalizedSize = (item.selectedSize ?? "").trim();
+
+    if (normalizedSize) {
+      const inv = variants?.find((x) => x.size === normalizedSize);
+      const availableQty = inv?.quantity ?? 0;
+
+      if (availableQty < quantity) {
+        throw Errors.badRequest("Insufficient stock");
+      }
+    } else {
+      // Defensive fallback: if selectedSize is missing, fallback to global stock.
+      if (item.product.stock < quantity) {
+        throw Errors.badRequest("Insufficient stock");
+      }
+    }
+  } else {
+    if (item.product.stock < quantity) {
+      throw Errors.badRequest("Insufficient stock");
+    }
   }
   return prisma.cartItem.update({
     where: { id: itemId },

@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           <h2 className="text-xl font-semibold text-zinc-900">2. Data We Collect</h2>
           <ul className="list-disc space-y-2 pl-6">
             <li><strong>Account data:</strong> name, email, phone number, password (hashed), role</li>
-            <li><strong>Verification data:</strong> Ghana Card details, selfie images, GPS location for seller verification</li>
+            <li><strong>Verification data:</strong> Ghana Card details and selfie images for seller verification</li>
             <li><strong>Transaction data:</strong> orders, cart, payments, messages, reviews</li>
             <li><strong>Technical data:</strong> IP address, device/browser info, session identifiers, audit logs</li>
             <li><strong>AI interaction data:</strong> search queries and AI feature usage (for quotas and improvement)</li>

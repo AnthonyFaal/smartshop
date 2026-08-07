@@ -9,7 +9,7 @@ import { Errors } from "@/server/errors";
 import { calculateTrustScore } from "@/server/services/trust.service";
 import { createNotification } from "@/lib/notifications/service";
 import { getPlanLimits } from "@/lib/config/subscriptions";
-import { SubscriptionPlan, SubscriptionStatus, NotificationChannel, NotificationType } from "@prisma/client";
+import { SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
 
 async function syncSubscriptionOfferingsForAdmin() {
   const defaults = (await import("@/lib/config/subscriptions")).getDefaultSubscriptionOfferings();
@@ -138,6 +138,59 @@ export const adminRouter = createTRPCRouter({
         : await prisma.subscriptionOffering.create({ data: payload });
 
       return { offering };
+    }),
+
+  reviewList: adminProcedure
+    .use(withErrorHandling)
+    .input(
+      z.object({
+        limit: z.number().min(1).max(50).optional(),
+        cursor: z.string().uuid().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const limit = input.limit ?? 20;
+      const items = await prisma.review.findMany({
+        where: { deletedAt: null },
+        take: limit + 1,
+        ...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              profile: true,
+            },
+          },
+          product: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+          store: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      let nextCursor: string | undefined;
+      if (items.length > limit) {
+        const next = items.pop();
+        nextCursor = next?.id;
+      }
+
+      return {
+        items: items.map((review) => ({
+          ...review,
+          rating: Number(review.rating),
+        })),
+        nextCursor,
+      };
     }),
 
   mySubscription: adminProcedure
@@ -758,8 +811,8 @@ export const adminRouter = createTRPCRouter({
       await createNotification({
         userId: verification.userId,
         type: "VERIFICATION",
-        title: "GPS/Campus Location Approved",
-        body: "Your GPS/campus location has been approved. Next, our team will confirm the final verification.",
+        title: "Seller verification approved",
+        body: "Your seller verification has been approved. Your store will be reviewed for VERIFIED status.",
         channels: ["IN_APP", "EMAIL", "SMS"],
       });
 
@@ -769,7 +822,7 @@ export const adminRouter = createTRPCRouter({
           action: "APPROVE",
           entityType: "SellerVerification",
           entityId: input.verificationId,
-          newValues: { step: "GPS_LOCATION", notes: input.notes ?? null },
+        newValues: { step: "SELLER_VERIFICATION", notes: input.notes ?? null },
         },
       });
 
@@ -803,7 +856,7 @@ export const adminRouter = createTRPCRouter({
       await createNotification({
         userId: verification.userId,
         type: "VERIFICATION",
-        title: "GPS/Campus Location Rejected",
+        title: "Seller verification rejected",
         body: input.reason,
         channels: ["IN_APP", "EMAIL"],
       });
@@ -814,7 +867,7 @@ export const adminRouter = createTRPCRouter({
           action: "REJECT",
           entityType: "SellerVerification",
           entityId: input.verificationId,
-          newValues: { step: "GPS_LOCATION", reason: input.reason },
+        newValues: { step: "SELLER_VERIFICATION", reason: input.reason },
         },
       });
 
@@ -849,7 +902,7 @@ export const adminRouter = createTRPCRouter({
       await createNotification({
         userId: verification.userId,
         type: "VERIFICATION",
-        title: "Resubmit GPS/Campus Location Required",
+        title: "Seller verification resubmission required",
         body: input.reason,
         channels: ["IN_APP", "EMAIL"],
       });
@@ -861,7 +914,7 @@ export const adminRouter = createTRPCRouter({
           entityType: "SellerVerification",
           entityId: input.verificationId,
           newValues: {
-            step: "GPS_LOCATION",
+            step: "SELLER_VERIFICATION",
             resubmissionReason: input.reason,
           },
         },
@@ -901,6 +954,10 @@ export const adminRouter = createTRPCRouter({
             verificationLevel: "TRUSTED_SELLER",
           },
         }),
+        prisma.store.updateMany({
+          where: { ownerId: verification.userId, deletedAt: null },
+          data: { verificationStatus: "VERIFIED", verifiedAt: new Date(), verifiedBy: ctx.user.id },
+        }),
       ]);
 
       await calculateTrustScore(verification.userId);
@@ -939,15 +996,21 @@ export const adminRouter = createTRPCRouter({
       });
       if (!verification) throw Errors.notFound("Verification");
 
-      await prisma.sellerVerification.update({
-        where: { id: input.verificationId },
-        data: {
-          status: "REJECTED",
-          reviewedBy: ctx.user.id,
-          reviewedAt: new Date(),
-          rejectionReason: input.reason,
-        },
-      });
+      await prisma.$transaction([
+        prisma.sellerVerification.update({
+          where: { id: input.verificationId },
+          data: {
+            status: "REJECTED",
+            reviewedBy: ctx.user.id,
+            reviewedAt: new Date(),
+            rejectionReason: input.reason,
+          },
+        }),
+        prisma.store.updateMany({
+          where: { ownerId: verification.userId, deletedAt: null },
+          data: { verificationStatus: "REJECTED", verifiedAt: null, verifiedBy: null },
+        }),
+      ]);
 
       await createNotification({
         userId: verification.userId,

@@ -1,5 +1,5 @@
 "use client";
-
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -8,7 +8,6 @@ import {
   Camera,
   Clock3,
   CreditCard,
-  MapPin,
   ShieldCheck,
   ShieldX,
   User,
@@ -19,13 +18,15 @@ import {
 } from "lucide-react";
 
 import { trpc } from "@/lib/trpc/client";
-import { Header } from "@/components/layout/header";
+import { AdminPageShell } from "@/components/layout/admin-page-shell";
+import { PageShell } from "@/components/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSellerVerificationSummary } from "@/lib/admin/verification";
+import { getSellerVerificationSummary, type SellerVerificationReviewStatus, type SellerVerificationSummary } from "@/lib/admin/verification";
+import { adminRoutes } from "@/lib/admin/navigation";
 
 type ReasonById = Record<string, string>;
 
@@ -39,17 +40,9 @@ type SellerQueueItemUser = {
 
 type SellerQueueItem = {
   id: string;
-  shop_city?: string | null;
-  shop_region?: string | null;
-  shop_address?: string | null;
-  latitude?: unknown;
-  longitude?: unknown;
   ghanaCardFrontUrl?: string | null;
-  ghanaCardBackUrl?: string | null;
-  ghanaCardNumber?: string | null;
   selfieUrl?: string | null;
-  isLocationVerified?: boolean | null;
-  status?: string | null;
+  status?: SellerVerificationReviewStatus | null;
   user?: SellerQueueItemUser | null;
 };
 
@@ -63,14 +56,14 @@ export default function AdminVerificationCenterPage() {
   const items = (data?.items ?? []) as SellerQueueItem[];
 
   return (
-    <div className="min-h-screen ">
-      <Header />
+    <PageShell>
+      <AdminPageShell activeHref={adminRoutes.verificationCenter}>
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {/* Breadcrumb & Title */}
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <nav className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-              <Link href="/admin" className="flex items-center gap-1 hover:text-emerald-600 transition-colors">
+              <Link href={adminRoutes.dashboard} className="flex items-center gap-1 hover:text-emerald-600 transition-colors">
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Admin Dashboard
               </Link>
@@ -124,8 +117,7 @@ export default function AdminVerificationCenterPage() {
                   phoneVerified: Boolean(item.user?.phoneVerified),
                   hasGhanaCard: Boolean(item.ghanaCardFrontUrl),
                   hasSelfie: Boolean(item.selfieUrl),
-                  hasLocation: Boolean(item.isLocationVerified),
-                  status: item.status as any,
+                  status: item.status,
                 });
 
                 return (
@@ -142,7 +134,8 @@ export default function AdminVerificationCenterPage() {
           </CardContent>
         </Card>
       </main>
-    </div>
+      </AdminPageShell>
+    </PageShell>
   );
 }
 
@@ -153,7 +146,7 @@ function VerificationRow({
   setReason,
 }: {
   item: SellerQueueItem;
-  summary: any;
+  summary: SellerVerificationSummary;
   reason: string;
   setReason: (value: string) => void;
 }) {
@@ -210,7 +203,7 @@ function VerificationRow({
           <div className="flex flex-col items-start sm:items-end gap-1">
             <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-bold">Metrics Progress</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-zinc-700">{summary.completedCount}/4 Checklist</span>
+              <span className="text-xs font-semibold text-zinc-700">{summary.completedCount}/3 Checklist</span>
               <div className="w-16 bg-zinc-200 h-1.5 rounded-full overflow-hidden hidden xs:block">
                 <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${summary.progress}%` }} />
               </div>
@@ -232,22 +225,7 @@ function VerificationRow({
           <div className="lg:col-span-2 space-y-4">
             
             {/* Split Data Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Store Logistics Box */}
-              <div className="rounded-xl border border-zinc-200/60 bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
-                  <MapPin className="h-3.5 w-3.5 text-emerald-600" />
-                  Physical Shop Layout
-                </div>
-                <div className="space-y-2 text-xs text-zinc-600">
-                  <p><span className="font-medium text-zinc-900 block mb-0.5">Region Location</span> {item.shop_city ?? "—"}, {item.shop_region ?? "—"}</p>
-                  <p><span className="font-medium text-zinc-900 block mb-0.5">Physical Address</span> {item.shop_address || "—"}</p>
-                  <p className="font-mono text-[11px] bg-zinc-50 p-1.5 rounded text-zinc-500">
-                    Lat: {String(item.latitude ?? "—")}, Lng: {String(item.longitude ?? "—")}
-                  </p>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">  
               {/* Progress Detail */}
               <div className="rounded-xl border border-zinc-200/60 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3">
@@ -278,12 +256,10 @@ function VerificationRow({
               
               <div className="bg-zinc-50/50 p-3 rounded-lg mb-4 border border-zinc-100">
                 <div className="text-xs text-zinc-500">Ghana Card Register Reference</div>
-                <div className="text-sm font-semibold text-zinc-800 font-mono">{item.ghanaCardNumber || "Not Provided"}</div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <DocumentPreview title="ID Card Front" url={item.ghanaCardFrontUrl ?? null} alt="Ghana Card Face Side" />
-                <DocumentPreview title="ID Card Back" url={item.ghanaCardBackUrl ?? null} alt="Ghana Card Reverse Side" />
                 <DocumentPreview title="Live Selfie Check" url={item.selfieUrl ?? null} alt="User Verification Selfie" />
               </div>
             </div>
@@ -299,7 +275,7 @@ function VerificationRow({
 
               <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-3 text-xs text-emerald-800 mb-4 flex gap-2">
                 <Camera className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
-                <span>Verify that portraits match and physical locations correspond to real merchant points.</span>
+                <span>Verify that the submitted identity documents and selfie belong to the same seller.</span>
               </div>
 
               <label htmlFor={`reason-${item.id}`} className="sr-only">Rejection Reason</label>
@@ -377,7 +353,14 @@ function DocumentPreview({ title, url, alt }: { title: string; url: string | nul
         </a>
       </div>
       <div className="p-2 bg-white flex items-center justify-center">
-        <img src={url ?? undefined} alt={alt} className="h-32 w-full object-cover rounded bg-zinc-50 transition-transform duration-200 group-hover:scale-105" />
+        <Image
+          src={url ?? ""}
+          alt={alt}
+          width={400}
+          height={128}
+          className="h-32 w-full rounded object-cover bg-zinc-50 transition-transform duration-200 group-hover:scale-105"
+          unoptimized
+        />
       </div>
     </div>
   );

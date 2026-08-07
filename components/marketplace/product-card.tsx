@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils/format";
 import { ShieldCheck, Star } from "lucide-react";
 
+type VerificationStatus = "PENDING" | "UNDER_REVIEW" | "VERIFIED" | "REJECTED" | "SUSPENDED";
+
 interface ProductCardProps {
   product: {
     id: string;
@@ -19,7 +21,7 @@ interface ProductCardProps {
     store: {
       name: string;
       slug: string;
-      isVerified: boolean;
+      verificationStatus: VerificationStatus;
     };
   };
 }
@@ -53,7 +55,8 @@ export function ProductCard({ product }: ProductCardProps) {
             alt={product.title}
             fill
             className="object-cover transition-transform group-hover:scale-105"
-            sizes="(max-width: 768px) 50vw, 25vw"
+            sizes="(max-width:768px) 50vw, 25vw"
+            unoptimized
           />
           {discount && (
             <Badge className="absolute left-2 top-2" variant="destructive">
@@ -67,7 +70,7 @@ export function ProductCard({ product }: ProductCardProps) {
           </h3>
           <div className="flex items-center gap-1 text-xs text-zinc-500">
             <span>{product.store.name}</span>
-            {product.store.isVerified && (
+            {product.store.verificationStatus === "VERIFIED" && (
               <ShieldCheck className="h-3 w-3 text-blue-500" aria-label="Verified store" />
             )}
           </div>

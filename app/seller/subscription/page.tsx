@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { SellerPageShell } from "@/components/layout/seller-page-shell";
 import {
@@ -14,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc/client";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils/format";
+import { formatMaxProductsDisplay } from "@/lib/config/subscriptions";
 
 type PlanCardData = {
   tier: string;
@@ -48,15 +48,6 @@ function formatStatus(status: string | null | undefined) {
     default:
       return status ?? "Unknown";
   }
-}
-
-function formatLimitValue(value: number, label: string) {
-  if (label === "maxProducts") {
-    if (!Number.isFinite(value)) return "Unlimited";
-    return String(value);
-  }
-  if (!Number.isFinite(value)) return "Unlimited";
-  return String(value);
 }
 
 export default function SellerSubscriptionPage() {
@@ -144,7 +135,7 @@ export default function SellerSubscriptionPage() {
                         </div>
 
                         <ul className="space-y-2 text-sm text-zinc-600">
-                          <li>• Max products: {planItem.maxProducts === null || Number.isFinite(planItem.maxProducts) ? String(planItem.maxProducts) : "Unlimited"}</li>
+                          <li>• Max products: {formatMaxProductsDisplay(planItem.maxProducts)}</li>
                           <li>• AI tier: {planItem.aiTier}</li>
                           <li>• Analytics: {planItem.analytics ? "Included" : "Not included"}</li>
                           <li>• Promotions: {planItem.promotions ? "Included" : "Not included"}</li>

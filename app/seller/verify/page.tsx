@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   ShieldCheck,
   Camera,
-  MapPin,
   CreditCard,
   CheckCircle2,
   ArrowRight,
@@ -48,14 +47,7 @@ const steps = [
       "Take a live selfie to match your Ghana Card photo.",
     href: "/seller/verify/selfie",
   },
-  {
-    key: "location",
-    icon: MapPin,
-    title: "Campus location",
-    description:
-      "Confirm that you are within the UMaT pilot delivery zone.",
-    href: "/seller/verify/campus-location",
-  },
+  
 ];
 
 export default function SellerVerifyPage() {
@@ -129,7 +121,6 @@ export default function SellerVerifyPage() {
     phone: user.phoneVerified,
     ghanaCard: Boolean(verification?.ghanaCardFrontUrl),
     selfie: Boolean(verification?.selfieUrl),
-    location: Boolean(verification?.isLocationVerified),
   };
 
   const completed = Object.values(status).filter(Boolean).length;

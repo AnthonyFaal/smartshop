@@ -1,12 +1,11 @@
 "use client";
-
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ShoppingCart, Heart, MessageCircle, User, Store } from "lucide-react";
+import { ShoppingCart, Heart, MessageCircle, User } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import { useAuthUser } from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect } from "react";
 
 
@@ -18,9 +17,14 @@ export function Header() {
 
   // Keep header UI in sync on login/logout.
   // IMPORTANT: never call setState during render; do it in an effect.
-  // We’ll derive the UI from query result first, and also push it into context.
+  // We'll derive the UI from query result first, and also push it into context.
   const resolvedUser = user ?? contextUser ?? null;
-  const resolvedIsLoading = isLoading && resolvedUser === null;
+  const { data: cart } = trpc.cart.get.useQuery(undefined, {
+    enabled: !!resolvedUser,
+  });
+
+  const cartItemCount =
+    cart?.items.reduce((total, item) => total + item.quantity, 0) ?? 0;
 
   // Keep the context in sync after query changes.
   useEffect(() => {
@@ -36,23 +40,33 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600">
-            <Store className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-xl font-bold text-zinc-900">SmartShop</span>
-        </Link>
+      <Link href="/" className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg  overflow-hidden">
+          <Image
+            src="/icon.png" // place file in /public/logo.png
+            alt="SmartShop logo"
+            width={25}
+            height={25}
+            className="object-contain w-auto h-auto"
+            priority
+          />
+        </div>
+
+        <span className="text-xl font-bold text-zinc-900">
+          SmartShop
+        </span>
+      </Link>
 
         <nav className="hidden items-center gap-6 md:flex" aria-label="Main navigation">
           <Link href="/marketplace" className="text-sm font-medium text-zinc-600 hover:text-emerald-600">
             Marketplace
           </Link>
-          {user?.role === "SELLER" && (
+          {resolvedUser?.role === "SELLER" && (
             <Link href="/seller" className="text-sm font-medium text-zinc-600 hover:text-emerald-600">
               Seller Dashboard
             </Link>
           )}
-          {user?.role === "ADMIN" && (
+          {resolvedUser?.role === "ADMIN" && (
             <Link href="/admin" className="text-sm font-medium text-zinc-600 hover:text-emerald-600">
               Admin
             </Link>
@@ -60,12 +74,7 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {resolvedIsLoading ? (
-            <>
-              <Skeleton className="h-9 w-16" />
-              <Skeleton className="h-9 w-24" />
-            </>
-          ) : resolvedUser ? (
+          {resolvedUser ? (
             <>
               <Button variant="ghost" size="icon" asChild>
                 <Link href="/wishlist" aria-label="Wishlist">
@@ -78,8 +87,13 @@ export function Header() {
                 </Link>
               </Button>
               <Button variant="ghost" size="icon" asChild>
-                <Link href="/cart" aria-label="Cart">
+                <Link href="/cart" aria-label={`Cart${cartItemCount ? `, ${cartItemCount} items` : ""}`} className="relative">
                   <ShoppingCart className="h-5 w-5" />
+                  {cartItemCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white">
+                      {cartItemCount > 99 ? "99+" : cartItemCount}
+                    </span>
+                  )}
                 </Link>
               </Button>
               <Button variant="ghost" size="icon" asChild>

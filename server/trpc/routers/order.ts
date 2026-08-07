@@ -23,18 +23,32 @@ export const orderRouter = createTRPCRouter({
     .input(
       z.object({
         shippingAddress: addressSchema,
+        fulfillmentLocationId: z.string().uuid().optional(),
         paymentMethod: z.enum([
           "MOBILE_MONEY",
           "CARD",
           "BANK_TRANSFER",
           "CASH_ON_DELIVERY",
         ]),
+        paymentPhone: z.string().trim().regex(/^\+?[0-9]{9,15}$/),
+        cardholderName: z.string().trim().max(120).optional(),
+        promoCode: z.string().trim().max(40).optional(),
         notes: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) =>
       orderService.createOrderFromCart(ctx.user.id, input)
     ),
+
+  verifyPaystack: protectedProcedure
+    .use(withErrorHandling)
+    .input(z.object({ reference: z.string().min(1).max(255) }))
+    .mutation(({ input, ctx }) => orderService.verifyPaystackPayment(ctx.user.id, input.reference)),
+
+  previewPromotion: protectedProcedure
+    .use(withErrorHandling)
+    .input(z.object({ promoCode: z.string().trim().min(3).max(40) }))
+    .query(({ input, ctx }) => orderService.previewPromotionFromCart(ctx.user.id, input.promoCode)),
 
   listBuyer: protectedProcedure
     .use(withErrorHandling)
@@ -83,6 +97,10 @@ export const orderRouter = createTRPCRouter({
     .query(async ({ input, ctx }) =>
       orderService.listOrders(ctx.user.id, "seller", input)
     ),
+
+  listSellerCustomers: sellerProcedure
+    .use(withErrorHandling)
+    .query(async ({ ctx }) => orderService.listSellerCustomers(ctx.user.id)),
 
   updateStatus: sellerProcedure
     .use(withErrorHandling)
