@@ -7,6 +7,8 @@ export interface RateLimitResult {
   resetAt: number;
 }
 
+let lastRedisWarningAt = 0;
+
 export async function checkRateLimit(
   identifier: string,
   endpoint: string,
@@ -31,10 +33,17 @@ export async function checkRateLimit(
       resetAt,
     };
   } catch (error) {
-    console.warn("[RateLimit] Falling back to allow-all behavior because Redis is unavailable", error);
+    // Production must not silently lose brute-force protection. Local
+    // development, however, intentionally works without a Redis container so
+    // contributors can run the app and seed/login flows from a fresh checkout.
+    if (Date.now() - lastRedisWarningAt > 30_000) {
+      lastRedisWarningAt = Date.now();
+      console.warn("[RateLimit] Redis unavailable; using the configured failure policy.", error instanceof Error ? error.message : String(error));
+    }
+    const isProduction = env.NODE_ENV === "production";
     return {
-      allowed: true,
-      remaining: maxRequests,
+      allowed: !isProduction,
+      remaining: isProduction ? 0 : maxRequests,
       resetAt: Date.now() + windowMs,
     };
   }

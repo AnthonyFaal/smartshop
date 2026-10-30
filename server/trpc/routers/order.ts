@@ -24,12 +24,8 @@ export const orderRouter = createTRPCRouter({
       z.object({
         shippingAddress: addressSchema,
         fulfillmentLocationId: z.string().uuid().optional(),
-        paymentMethod: z.enum([
-          "MOBILE_MONEY",
-          "CARD",
-          "BANK_TRANSFER",
-          "CASH_ON_DELIVERY",
-        ]),
+        fulfillmentMethod: z.enum(["PICKUP", "CAMPUS_DELIVERY"]).default("PICKUP"),
+        paymentMethod: z.enum(["MOBILE_MONEY", "CARD"]),
         paymentPhone: z.string().trim().regex(/^\+?[0-9]{9,15}$/),
         cardholderName: z.string().trim().max(120).optional(),
         promoCode: z.string().trim().max(40).optional(),

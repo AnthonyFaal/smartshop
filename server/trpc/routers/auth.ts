@@ -70,6 +70,13 @@ async function syncSubscriptionOfferings() {
           isActive: defaultOffering.isActive,
         },
       });
+    } else {
+      // Pilot policy is centrally controlled. Do not leave previously seeded
+      // paid offerings purchasable merely because they already existed.
+      await prisma.subscriptionOffering.update({
+        where: { id: existingByTier.get(tier)![0].id },
+        data: { isActive: defaultOffering.isActive },
+      });
     }
   }
 
@@ -250,17 +257,15 @@ export const authRouter = createTRPCRouter({
       }
 
       const amountGhs = Number(offering?.priceGhs ?? getPlanLimits(input.plan).priceGhs ?? 0);
-      const now = new Date();
-      const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
       const provider = getPaymentProvider(process.env.PAYMENT_PROVIDER);
       const result = await provider.initiate({
         orderId: `sub_${ctx.user.id}_${Date.now()}`,
-        amount: Math.round(amountGhs * 100),
+        amount: amountGhs,
         currency: "GHS",
         method: PaymentMethod.CARD,
         customerEmail: ctx.user.email,
         customerPhone: ctx.user.phone ?? undefined,
+        callbackUrl: `${process.env.APP_URL}/seller/subscription`,
         metadata: {
           plan: input.plan,
           userId: ctx.user.id,
@@ -268,28 +273,14 @@ export const authRouter = createTRPCRouter({
         },
       });
 
-      const nextStatus = result.status === "COMPLETED" ? "ACTIVE" : "TRIALING";
-
-      await prisma.subscription.upsert({
-        where: { userId: ctx.user.id },
-        create: {
-          userId: ctx.user.id,
-          plan: input.plan,
-          status: nextStatus,
-          currentPeriodStart: now,
-          currentPeriodEnd: periodEnd,
-          cancelAtPeriodEnd: false,
-          providerRef: result.providerRef,
-        },
-        update: {
-          plan: input.plan,
-          status: nextStatus,
-          currentPeriodStart: now,
-          currentPeriodEnd: periodEnd,
-          cancelAtPeriodEnd: false,
-          providerRef: result.providerRef,
-        },
+      await prisma.subscriptionPayment.create({
+        data: { userId: ctx.user.id, plan: input.plan, amount: amountGhs, currency: "GHS", status: result.status, providerRef: result.providerRef, providerData: result.providerData as import("@prisma/client").Prisma.InputJsonValue | undefined, completedAt: result.status === "COMPLETED" ? new Date() : undefined },
       });
+
+      if (result.status === "COMPLETED") {
+        const now = new Date();
+        await prisma.subscription.upsert({ where: { userId: ctx.user.id }, create: { userId: ctx.user.id, plan: input.plan, status: "ACTIVE", currentPeriodStart: now, currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000), cancelAtPeriodEnd: false, providerRef: result.providerRef }, update: { plan: input.plan, status: "ACTIVE", currentPeriodStart: now, currentPeriodEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000), cancelAtPeriodEnd: false, providerRef: result.providerRef } });
+      }
 
       await createNotification({
         userId: ctx.user.id,
@@ -303,7 +294,7 @@ export const authRouter = createTRPCRouter({
         success: true,
         redirectUrl: result.redirectUrl ?? null,
         providerRef: result.providerRef,
-        message: nextStatus === "ACTIVE" ? "Your plan is now active." : "Complete payment to activate your plan.",
+        message: result.status === "COMPLETED" ? "Your plan is now active." : "Complete payment to activate your plan.",
       };
     }),
 

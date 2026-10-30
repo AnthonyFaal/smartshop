@@ -37,6 +37,7 @@ export class PaystackPaymentProvider implements PaymentProvider {
         email: input.customerEmail,
         reference: `SS_${input.orderId}_${Date.now()}`,
         callback_url:
+          input.callbackUrl ??
           process.env.PAYSTACK_CALLBACK_URL ??
           `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/checkout`,
         channels: input.method === "CARD" ? ["card"] : ["mobile_money"],

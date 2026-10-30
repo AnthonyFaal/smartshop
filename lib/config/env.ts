@@ -46,6 +46,10 @@ const envSchema = z.object({
 
   PAYMENT_PROVIDER: z.string().default("mock"),
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+  CRON_SECRET: z.string().min(32).optional(),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
+  PAYSTACK_CALLBACK_URL: z.string().url().optional(),
+  NEXT_PUBLIC_REALTIME_WS_URL: z.string().url().optional(),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60_000),
   RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),

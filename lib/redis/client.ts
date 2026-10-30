@@ -89,14 +89,50 @@ function createIoRedisClient(): RedisClient {
   };
 }
 
+/**
+ * Redis accelerates cacheable reads but is also used by security controls.
+ * After a transport failure, short-circuit repeat calls briefly: otherwise an
+ * invalid DNS record can add several seconds to every request. Consumers still
+ * choose the correct policy (cache miss vs. rate-limit fail-closed).
+ */
+function withCircuitBreaker(client: RedisClient): RedisClient {
+  let unavailableUntil = 0;
+  let lastWarningAt = 0;
+  const execute = async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (Date.now() < unavailableUntil) {
+      throw new Error("Redis is temporarily unavailable");
+    }
+    try {
+      return await operation();
+    } catch (error) {
+      unavailableUntil = Date.now() + 30_000;
+      if (Date.now() - lastWarningAt > 30_000) {
+        lastWarningAt = Date.now();
+        console.warn("[Redis] Temporarily disabling remote calls after a connection failure.");
+      }
+      throw error;
+    }
+  };
+  return {
+    get: (key) => execute(() => client.get(key)),
+    setex: (key, seconds, value) => execute(() => client.setex(key, seconds, value)),
+    del: (...keys) => execute(() => client.del(...keys)),
+    incr: (key) => execute(() => client.incr(key)),
+    expire: (key, seconds) => execute(() => client.expire(key, seconds)),
+    ttl: (key) => execute(() => client.ttl(key)),
+    keys: (pattern) => execute(() => client.keys(pattern)),
+    ping: () => execute(() => client.ping()),
+  };
+}
+
 function createRedisClient(): RedisClient {
   if (hasUpstashRest()) {
     console.info("[Redis] Using Upstash REST client");
-    return createUpstashRestClient();
+    return withCircuitBreaker(createUpstashRestClient());
   }
 
   console.info(`[Redis] Using ioredis at ${env.REDIS_URL.replace(/:[^:@]+@/, ":***@")}`);
-  return createIoRedisClient();
+  return withCircuitBreaker(createIoRedisClient());
 }
 
 export const redis = globalForRedis.redis ?? createRedisClient();
@@ -124,9 +160,15 @@ export const cacheKeys = {
 } as const;
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  const data = await redis.get(key);
-  if (!data) return null;
-  return JSON.parse(data) as T;
+  try {
+    const data = await redis.get(key);
+    if (!data) return null;
+    return JSON.parse(data) as T;
+  } catch {
+    // PostgreSQL remains authoritative. A cache outage is a cache miss, never
+    // a reason for a catalogue or product page to fail.
+    return null;
+  }
 }
 
 export async function cacheSet(
@@ -134,16 +176,26 @@ export async function cacheSet(
   value: unknown,
   ttlSeconds: number
 ): Promise<void> {
-  await redis.setex(key, ttlSeconds, JSON.stringify(value));
+  try {
+    await redis.setex(key, ttlSeconds, JSON.stringify(value));
+  } catch {
+    // Best-effort cache population.
+  }
 }
 
 export async function cacheDelete(key: string): Promise<void> {
-  await redis.del(key);
+  try {
+    await redis.del(key);
+  } catch {
+    // Stale cache entries expire quickly; database writes must still succeed.
+  }
 }
 
 export async function cacheDeletePattern(pattern: string): Promise<void> {
-  const keys = await redis.keys(pattern);
-  if (keys.length > 0) {
-    await redis.del(...keys);
+  try {
+    const keys = await redis.keys(pattern);
+    if (keys.length > 0) await redis.del(...keys);
+  } catch {
+    // Best-effort invalidation.
   }
 }

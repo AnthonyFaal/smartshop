@@ -76,13 +76,20 @@ export async function getMyReviewForProduct(userId: string, productId: string) {
   });
 }
 
-function computeVerifiedFlag(_args: {
+async function computeVerifiedFlag(args: {
   userId: string;
   productId: string;
 }) {
-  // Conservative default: keep unverified unless business rule is known.
-  // The schema already includes `isVerified`, so we can enhance later.
-  return false;
+  // A verified review must be tied to a real fulfilled purchase. This makes
+  // ratings useful as a trust signal rather than a free-text marketing tool.
+  const item = await prisma.orderItem.findFirst({
+    where: {
+      productId: args.productId,
+      order: { buyerId: args.userId, status: { in: ["DELIVERED", "COMPLETED"] } },
+    },
+    select: { orderId: true },
+  });
+  return Boolean(item);
 }
 
 function normalizeRatingTo05Steps(rating: number) {
@@ -127,7 +134,7 @@ export async function upsertMyReviewForProduct(params: {
 
   if (!product) throw Errors.notFound("Product");
 
-  const isVerified = computeVerifiedFlag({ userId, productId });
+  const isVerified = await computeVerifiedFlag({ userId, productId });
 
   // Prefer update if exists, else create.
   const existing = await prisma.review.findFirst({
@@ -170,7 +177,9 @@ export async function upsertMyReviewForProduct(params: {
       userId,
       productId,
       storeId: product.storeId,
-      orderId: null,
+      orderId: isVerified
+        ? (await prisma.orderItem.findFirst({ where: { productId, order: { buyerId: userId, status: { in: ["DELIVERED", "COMPLETED"] } } }, select: { orderId: true } }))?.orderId ?? null
+        : null,
       rating,
       title: title ?? null,
       content: content ?? null,

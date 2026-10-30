@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db/prisma";
-import { generateOrderNumber } from "@/lib/utils/format";
+import { generateOrderNumber, generatePickupCode } from "@/lib/utils/format";
 import { Errors } from "@/server/errors";
 import { getPaymentProvider } from "@/lib/payments/provider";
 import { createNotification } from "@/lib/notifications/service";
+import { createDeliveryTaskForPaidOrder, getFulfillmentQuote } from "@/server/services/delivery.service";
+import { createSettlementForDeliveredOrder } from "@/server/services/settlement.service";
 import { Prisma, type OrderStatus, type PaymentMethod } from "@prisma/client";
 
 type InventoryItem = {
@@ -117,6 +119,7 @@ export async function createOrderFromCart(
       country: string;
     };
     fulfillmentLocationId?: string;
+    fulfillmentMethod?: "PICKUP" | "CAMPUS_DELIVERY";
     paymentMethod: PaymentMethod;
     paymentPhone: string;
     cardholderName?: string;
@@ -133,6 +136,9 @@ export async function createOrderFromCart(
   paystackAccessCode?: string;
   paystackReference?: string;
 }> {
+  if (!["MOBILE_MONEY", "CARD"].includes(input.paymentMethod)) {
+    throw Errors.badRequest("The pilot accepts Mobile Money and card payments only.");
+  }
   await releaseExpiredPendingPayments();
   const cart = await prisma.cart.findUnique({
     where: { userId: buyerId },
@@ -173,6 +179,11 @@ export async function createOrderFromCart(
   if (input.fulfillmentLocationId && !fulfillmentLocation) {
     throw Errors.badRequest("Invalid fulfillment location");
   }
+  const fulfillmentMethod = input.fulfillmentMethod ?? "PICKUP";
+  const fulfillmentQuote = await getFulfillmentQuote(
+    fulfillmentMethod,
+    input.fulfillmentLocationId
+  );
 
   const shippingAddressWithFulfillment = {
     ...input.shippingAddress,
@@ -238,9 +249,12 @@ export async function createOrderFromCart(
     const discount = promotion?.maxDiscount && rawDiscount.greaterThan(new Prisma.Decimal(promotion.maxDiscount)) ? new Prisma.Decimal(promotion.maxDiscount) : rawDiscount;
     const discountedSubtotal = subtotal.sub(discount).lessThan(0) ? new Prisma.Decimal(0) : subtotal.sub(discount);
 
-    // toll fee applied on subtotal
-    const fee = discountedSubtotal.mul(new Prisma.Decimal(feePercent));
-    const total = discountedSubtotal.add(fee);
+    // The buyer sees a marketplace service fee and an independently priced
+    // fulfilment fee. `tax` remains zero: it is not a substitute for tax logic.
+    const platformFee = discountedSubtotal.mul(new Prisma.Decimal(feePercent));
+    const shippingCost = new Prisma.Decimal(fulfillmentQuote.shippingCost);
+    const sellerPayout = discountedSubtotal;
+    const total = discountedSubtotal.add(platformFee).add(shippingCost);
 
     const created = await prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
@@ -250,8 +264,15 @@ export async function createOrderFromCart(
           sellerId: items[0].product.sellerId,
           storeId: items[0].product.storeId,
           subtotal,
+          shippingCost,
+          platformFee,
+          sellerPayout,
+          fulfillmentMethod,
+          // The same one-time handoff code protects both staffed pickup and
+          // campus delivery. It is proof that the recipient accepted the item.
+          pickupCode: generatePickupCode(),
           promotionId: promotion?.id,
-          tax: fee,
+          tax: new Prisma.Decimal(0),
           total,
           shippingAddress: shippingAddressWithFulfillment,
           notes: input.notes,
@@ -286,57 +307,50 @@ export async function createOrderFromCart(
         if (usage.count !== 1) throw Errors.badRequest("This discount code has reached its usage limit.");
       }
 
-      const buyer = await tx.user.findUnique({
-        where: { id: buyerId },
-        select: { email: true, phone: true },
-      });
-
-      const isPaystackPayment = ["MOBILE_MONEY", "CARD"].includes(
-        input.paymentMethod
-      );
-
-      const paymentProvider = getPaymentProvider();
-      const paymentResult = isPaystackPayment
-        ? await paymentProvider.initiate({
-            orderId: order.id,
-            amount: Number(total),
-            currency: "GHS",
-            method: input.paymentMethod,
-            customerEmail: buyer?.email ?? "",
-            customerPhone: input.paymentPhone || buyer?.phone || undefined,
-            metadata: {
-              feePercent: String(feePercent),
-              fee: String(fee),
-              paymentPhone: input.paymentPhone,
-              ...(input.cardholderName ? { cardholderName: input.cardholderName } : {}),
-            },
-          })
-        : null;
-
-      await tx.payment.create({
+      const payment = await tx.payment.create({
         data: {
           orderId: order.id,
           userId: buyerId,
           amount: total,
           method: input.paymentMethod,
-          status: paymentResult?.status ?? "PENDING",
-          providerRef: paymentResult?.providerRef ?? undefined,
-          providerData: paymentResult?.providerData as
-            | Prisma.InputJsonValue
-            | undefined,
-          ...(paymentResult?.status === "COMPLETED" && {
-            paidAt: new Date(),
-            escrowHeldAt: new Date(),
-          }),
+          status: "PENDING",
         },
       });
-
-      if (paymentResult?.status === "COMPLETED") {
-        await finalizeOrderInTransaction(tx, order.id, items, promotion?.id);
-      }
-
-      return { order, paymentResult };
+      return { order, payment, total, platformFee, shippingCost };
     });
+
+    // Provider I/O must never happen inside the inventory/order transaction.
+    // The persisted pending payment is the idempotency anchor if the request
+    // times out and the provider later sends a webhook.
+    let paymentResult: Awaited<ReturnType<ReturnType<typeof getPaymentProvider>["initiate"]>> | null = null;
+    if (["MOBILE_MONEY", "CARD"].includes(input.paymentMethod)) {
+      const buyer = await prisma.user.findUnique({ where: { id: buyerId }, select: { email: true, phone: true } });
+      try {
+        paymentResult = await getPaymentProvider().initiate({
+          orderId: created.order.id,
+          amount: Number(created.total),
+          currency: "GHS",
+          method: input.paymentMethod,
+          customerEmail: buyer?.email ?? "",
+          customerPhone: input.paymentPhone || buyer?.phone || undefined,
+          metadata: {
+            feePercent: String(feePercent), platformFee: String(created.platformFee),
+            shippingCost: String(created.shippingCost), paymentPhone: input.paymentPhone,
+            ...(input.cardholderName ? { cardholderName: input.cardholderName } : {}),
+          },
+        });
+        await prisma.payment.update({
+          where: { id: created.payment.id },
+          data: { providerRef: paymentResult.providerRef, providerData: paymentResult.providerData as Prisma.InputJsonValue | undefined },
+        });
+        if (paymentResult.status === "COMPLETED") {
+          await settlePayment(paymentResult.providerRef, true, paymentResult.providerData as Prisma.InputJsonValue | undefined);
+        }
+      } catch (error) {
+        await failPendingPayment(created.payment.id, error instanceof Error ? error.message : "Payment provider could not start checkout");
+        throw Errors.badRequest("We could not start payment. Your inventory reservation has been released.");
+      }
+    }
 
     orders.push({
       id: created.order.id,
@@ -344,14 +358,14 @@ export async function createOrderFromCart(
       sellerId: created.order.sellerId,
     });
 
-    hasPendingPayment ||= created.paymentResult?.status === "PENDING";
+    hasPendingPayment ||= paymentResult?.status === "PENDING";
 
-    if (!paystackRedirectUrl && created.paymentResult?.redirectUrl) {
-      paystackRedirectUrl = created.paymentResult.redirectUrl;
+    if (!paystackRedirectUrl && paymentResult?.redirectUrl) {
+      paystackRedirectUrl = paymentResult.redirectUrl;
     }
-    if (!paystackAccessCode && created.paymentResult?.accessCode) {
-      paystackAccessCode = created.paymentResult.accessCode;
-      paystackReference = created.paymentResult.providerRef;
+    if (!paystackAccessCode && paymentResult?.accessCode) {
+      paystackAccessCode = paymentResult.accessCode;
+      paystackReference = paymentResult.providerRef;
     }
 
     await createNotification({
@@ -379,16 +393,44 @@ export async function createOrderFromCart(
   return { orders, paystackRedirectUrl, paystackAccessCode, paystackReference };
 }
 
-async function releaseExpiredPendingPayments() {
+export async function releaseExpiredPendingPayments() {
   const cutoff = new Date(Date.now() - 30 * 60 * 1000);
   const expired = await prisma.payment.findMany({
     where: { status: "PENDING", createdAt: { lt: cutoff }, order: { status: "PENDING" } },
-    select: { providerRef: true },
+    select: { id: true, providerRef: true },
     take: 50,
   });
   for (const payment of expired) {
-    if (payment.providerRef) await settlePayment(payment.providerRef, false, undefined, "Payment session expired");
+    if (payment.providerRef) {
+      await settlePayment(payment.providerRef, false, undefined, "Payment session expired");
+    } else {
+      // A crash between order persistence and provider initiation must not
+      // leave inventory reserved forever.
+      await failPendingPayment(payment.id, "Payment checkout did not start before the session expired");
+    }
   }
+  return expired.length;
+}
+
+async function failPendingPayment(paymentId: string, failureReason: string) {
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId }, include: { order: { include: { items: true } } },
+  });
+  if (!payment || payment.status !== "PENDING") return;
+  await prisma.$transaction(async (tx) => {
+    const changed = await tx.payment.updateMany({
+      where: { id: payment.id, status: "PENDING" },
+      data: { status: "FAILED", failureReason },
+    });
+    if (!changed.count) return;
+    for (const item of payment.order.items) {
+      await releaseInventory(tx, { productId: item.productId, quantity: item.quantity, selectedSize: item.selectedSize ?? "" });
+    }
+    if (payment.order.promotionId) {
+      await tx.promotion.updateMany({ where: { id: payment.order.promotionId, usageCount: { gt: 0 } }, data: { usageCount: { decrement: 1 } } });
+    }
+    await tx.order.update({ where: { id: payment.orderId }, data: { status: "CANCELLED", cancelledAt: new Date(), cancelReason: failureReason } });
+  });
 }
 
 export async function updateOrderStatus(
@@ -479,6 +521,8 @@ export async function updateOrderStatus(
     data: { orderId },
   });
 
+  if (status === "DELIVERED") await createSettlementForDeliveredOrder(orderId);
+
   return updated;
 }
 
@@ -548,6 +592,9 @@ export async function settlePayment(
       await tx.order.updateMany({ where: { id: payment.orderId, status: "PENDING" }, data: { status: "CANCELLED", cancelledAt: new Date(), cancelReason: failureReason ?? "Payment failed" } });
     }
   });
+  if (successful) {
+    await createDeliveryTaskForPaidOrder(payment.orderId);
+  }
 }
 
 export async function listOrders(

@@ -40,6 +40,7 @@ const enforceRole = (...roles: UserRole[]) =>
 
 export const protectedProcedure = t.procedure.use(enforceAuth);
 export const sellerProcedure = t.procedure.use(enforceRole("SELLER", "ADMIN"));
+export const runnerProcedure = t.procedure.use(enforceRole("RUNNER", "ADMIN"));
 export const adminProcedure = t.procedure.use(enforceRole("ADMIN"));
 
 export const withErrorHandling = t.middleware(async ({ next }) => {

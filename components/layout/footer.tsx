@@ -14,7 +14,7 @@ export function Footer() {
               <span className="text-lg font-bold">SmartShop</span>
             </div>
             <p className="text-sm text-zinc-500">
-              Ghana&apos;s trusted AI-powered marketplace. Buy and sell with confidence.
+              Verified campus commerce for UMaT/Tarkwa. Buy with a clear handoff and sell with accountable orders.
             </p>
           </div>
           <div>

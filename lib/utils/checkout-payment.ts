@@ -11,6 +11,7 @@ export function buildCheckoutSchema() {
     region: z.string().min(1),
     postalCode: z.string().optional(),
     fulfillmentLocationId: z.string().uuid().optional(),
+    fulfillmentMethod: z.enum(["PICKUP", "CAMPUS_DELIVERY"]).default("PICKUP"),
     paymentMethod: paymentMethodSchema,
     paymentPhone: z.string().trim().optional(),
     mobileMoneyNetwork: mobileMoneyNetworkSchema.optional(),
@@ -18,6 +19,9 @@ export function buildCheckoutSchema() {
     promoCode: z.string().trim().max(40).optional(),
     notes: z.string().optional(),
   }).superRefine((data, ctx) => {
+    if (data.fulfillmentMethod === "CAMPUS_DELIVERY" && !data.fulfillmentLocationId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["fulfillmentLocationId"], message: "Choose a campus delivery zone." });
+    }
     if (data.paymentMethod === "MOBILE_MONEY") {
       if (!data.mobileMoneyNetwork) {
         ctx.addIssue({

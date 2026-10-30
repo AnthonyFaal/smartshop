@@ -1,121 +1,82 @@
 # SmartShop
 
-AI-powered marketplace for Ghana. Built for trust, local commerce, and the UMaT campus pilot.
+SmartShop is a trust-first local-commerce platform piloting around UMaT, Tarkwa. It helps buyers order from verified local sellers with a clear pickup or campus-delivery promise. It is deliberately not a nationwide marketplace at this stage.
 
-## Tech Stack
+## Product focus
 
-- **Frontend:** Next.js 16, TypeScript, Tailwind CSS, Shadcn UI, TanStack Query, tRPC, Zustand, Framer Motion
-- **Backend:** Next.js Route Handlers, Server Actions, tRPC
-- **Database:** PostgreSQL 16 + Prisma 7
-- **Cache:** Upstash Redis (or local Redis for offline dev)
-- **Storage:** S3-compatible (MinIO for local dev)
-- **AI:** OpenAI-compatible provider
+- Verified local sellers and clear product availability
+- Buyer-paid pickup or campus-delivery fulfilment
+- Paid-order records, proof-aware delivery operations and dispute resolution
+- Mobile-money/card checkout through a Ghana-compatible provider
+- Seller catalogue, inventory and order tools
 
-## Quick Start
-
-### Prerequisites
-
-- Node.js 22+
-- pnpm 10+
-- Docker (for PostgreSQL and MinIO)
-- Upstash Redis database ([create one free](https://console.upstash.com/))
-
-### 1. Install dependencies
-
-```bash
-pnpm install
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-### 3. Configure Redis (Upstash)
-
-Create a database at [console.upstash.com](https://console.upstash.com/), open the **REST API** section, click **.env**, and copy the values into `.env`:
-
-```bash
-UPSTASH_REDIS_REST_URL=https://YOUR_ENDPOINT.upstash.io
-UPSTASH_REDIS_REST_TOKEN=YOUR_TOKEN
-```
-
-Use the REST credentials (not the TCP `rediss://` URL) — they work reliably with Next.js serverless routes.
-
-### 4. Start infrastructure
-
-```bash
-docker compose up -d postgres minio
-```
-
-Optional: run a local Redis container instead of Upstash:
-
-```bash
-docker compose --profile local-redis up -d postgres redis minio
-# and set REDIS_URL=redis://localhost:6379 in .env (leave UPSTASH_REDIS_URL unset)
-```
-
-### 5. Initialize database
-
-```bash
-pnpm db:push
-pnpm db:seed
-```
-
-### 6. Run development server
-
-```bash
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
-### Seed Accounts
-
-| Role   | Email                | Password   |
-|--------|----------------------|------------|
-| Admin  | admin@smartshop.gh   | Admin123!  |
-| Seller | seller@smartshop.gh  | Seller123! |
-
-## Project Structure
-
-```
-smartshop/
-├── app/              # Next.js pages & API routes
-├── components/       # React UI components
-├── lib/              # Auth, Redis, S3, AI, config
-├── server/           # tRPC routers, services, workers
-├── prisma/           # Database schema & seed
-├── docker/           # Production Dockerfile
-├── k8s/              # Kubernetes manifests
-├── tests/            # Unit & integration tests
-└── docs/             # Architecture documentation
-```
-
-## Scripts
-
-| Command          | Description                    |
-|------------------|--------------------------------|
-| `pnpm dev`       | Start development server       |
-| `pnpm build`     | Production build               |
-| `pnpm test`      | Run unit tests                 |
-| `pnpm db:push`   | Push schema to database        |
-| `pnpm db:seed`   | Seed sample data               |
-| `pnpm db:studio` | Open Prisma Studio             |
+The business thesis and pilot success criteria are in [docs/SMARTSHOP_THESIS.md](docs/SMARTSHOP_THESIS.md).
+The ordered implementation and operating checklist is in [docs/LAUNCH_READINESS.md](docs/LAUNCH_READINESS.md).
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full system design, scaling strategy, and security architecture.
+The app is a TypeScript modular monolith using Next.js App Router, tRPC, Prisma and PostgreSQL. Redis supports rate limiting and short-lived flows; S3-compatible storage holds product assets and private verification documents.
 
-## Deployment
+`app/` contains pages and route handlers. `server/services/` contains business rules. `server/trpc/` exposes typed procedures. `prisma/` contains the data model, migrations and safe seed routines.
+
+## Local development
+
+Requirements: Node 20+, pnpm 9+, Docker Desktop.
 
 ```bash
-docker compose up -d        # Full stack (app + infra)
+docker compose up -d postgres redis minio
+pnpm install
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
 ```
 
-Kubernetes manifests are in `k8s/`. CI/CD pipeline in `.github/workflows/ci.yml`.
+Open `http://localhost:3000`. The seed creates local pilot locations, delivery zones and a development admin account. Do not use seeded credentials or MinIO defaults outside local development.
 
-## License
+## Required production configuration
 
-Proprietary — SmartShop Ghana
+Set explicitly in production:
+
+- `DATABASE_URL`, `REDIS_URL`
+- `JWT_SECRET` and `CSRF_SECRET` (strong unique values)
+- S3 endpoint, credentials, buckets and a non-public verification-document policy
+- `PAYMENT_PROVIDER=paystack`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_WEBHOOK_SECRET`, `PAYSTACK_CALLBACK_URL`
+- SMTP credentials and a real SMS provider integration
+
+The development payment provider is `mock`; it is not a production payment configuration. Verify every webhook and reconcile provider settlements before releasing seller funds.
+
+## Delivery operating model
+
+`DeliveryZone` holds the delivery fee and promised minutes for a permitted local area. A paid campus-delivery order creates one `DeliveryTask`. An administrator assigns a runner and records the transition:
+
+`UNASSIGNED → ASSIGNED → PICKED_UP → DELIVERED`
+
+Pickup orders receive a short pickup code. Delivery revenue, marketplace fee and seller payout are stored separately on the order; the `tax` field remains zero until a compliant tax calculation is introduced.
+
+Run migrations before seeding whenever the schema changes:
+
+```bash
+pnpm db:migrate
+pnpm db:seed
+```
+
+## Quality checks
+
+```bash
+pnpm lint
+pnpm test
+pnpm build
+```
+
+## Production launch gates
+
+Do not launch until all of these are true:
+
+- lint, tests, build and migration checks pass in CI;
+- real SMS and payment flows are tested in provider sandbox/live environments;
+- payment/webhook reconciliation and refund runbooks exist;
+- a delivery operator, runner standards, pickup points and dispute SLA are named;
+- Ghana Data Protection Commission obligations, document retention and access controls have been reviewed with qualified local counsel;
+- pilot metrics show repeat fulfilled orders and positive contribution margin.
+
+SmartShop does not claim automatic biometric matching or hold funds as an escrow service. Those capabilities require additional operational, legal and provider controls.

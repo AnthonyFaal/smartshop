@@ -35,8 +35,8 @@ export const SUBSCRIPTION_PLAN_META: Record<
 > = {
   [SubscriptionPlan.FREE]: {
     label: "Free",
-    description: "The default plan for new sellers.",
-    badge: "Default",
+    description: "Everything a verified local seller needs to prove repeat demand.",
+    badge: "Pilot included",
     accent: "zinc",
     isPaid: false,
   },
@@ -71,9 +71,9 @@ export const SUBSCRIPTION_PLAN_META: Record<
  */
 export const SUBSCRIPTION_LIMITS = {
   [SubscriptionPlan.FREE]: {
-    maxProducts: 5,
+    maxProducts: 50,
     aiTier: "basic" as const,
-    analytics: false,
+    analytics: true,
     promotions: false,
     multiStore: false,
     teamManagement: false,
@@ -231,7 +231,9 @@ export function getDefaultSubscriptionOfferings() {
       freeTrialDays: 0,
       aiDailyRequests: 0,
       aiMaxTokensPerRequest: 0,
-      isActive: true,
+      // Monetisation is intentionally disabled until the marketplace has
+      // repeat, positive-margin fulfilled orders.
+      isActive: plan === SubscriptionPlan.FREE,
     };
   });
 }

@@ -96,6 +96,12 @@ export const storeRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      const sellerVerification = await prisma.sellerVerification.findUnique({
+        where: { userId: ctx.user.id }, select: { status: true },
+      });
+      if (sellerVerification?.status !== "APPROVED") {
+        throw Errors.forbidden("Complete seller identity verification before creating a public store.");
+      }
       const existingStoreCount = await prisma.store.count({
         where: { ownerId: ctx.user.id, deletedAt: null },
       });
@@ -144,6 +150,11 @@ export const storeRouter = createTRPCRouter({
           latitude: input.latitude,
           longitude: input.longitude,
           locationId: location.id,
+          // An approved seller with a complete, canonical pilot location may
+          // publish their first store immediately. Later material location
+          // changes intentionally require an operational re-review.
+          verificationStatus: "VERIFIED",
+          verifiedAt: new Date(),
         },
         select: {
           id: true,

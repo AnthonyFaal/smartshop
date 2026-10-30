@@ -7,6 +7,7 @@ export interface InitiatePaymentInput {
   method: PaymentMethod;
   customerEmail: string;
   customerPhone?: string;
+  callbackUrl?: string;
   metadata?: Record<string, string>;
 }
 
@@ -72,6 +73,9 @@ const providers: Record<string, PaymentProvider> = {
 
 export function getPaymentProvider(name?: string): PaymentProvider {
   const providerName = name ?? process.env.PAYMENT_PROVIDER ?? "mock";
+  if (process.env.NODE_ENV === "production" && providerName === "mock") {
+    throw new Error("The mock payment provider is not permitted in production");
+  }
   const provider = providers[providerName];
   if (!provider) {
     throw new Error(`Payment provider "${providerName}" not found`);

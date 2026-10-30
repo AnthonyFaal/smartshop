@@ -36,6 +36,7 @@ model User {
   notifications            Notification[]
   orders                   Order[]                   @relation("BuyerOrders")
   sellerOrders             Order[]                   @relation("SellerOrders")
+  settlements              SellerSettlement[]        @relation("SettlementSeller")
   otpRecords               OtpRecord[]
   payments                 Payment[]
   promotions               Promotion[]
@@ -45,10 +46,12 @@ model User {
   reportsFiled             Report[]                  @relation("ReporterReports")
   reviews                  Review[]
   sellerVerification       SellerVerification?
+  deliveryTasks            DeliveryTask[]            @relation("DeliveryRunner")
   sessions                 Session[]
   storeFollows             StoreFollow[]
   stores                   Store[]
   subscription             Subscription?
+  subscriptionPayments     SubscriptionPayment[]
   trustScore               TrustScore?
   wishlists                Wishlist[]
 
@@ -150,12 +153,32 @@ model Location {
   parent    Location?    @relation("LocationTree", fields: [parentId], references: [id])
   children  Location[]   @relation("LocationTree")
   stores    Store[]
+  deliveryZones DeliveryZone[]
 
   @@index([name])
   @@index([type])
   @@index([region])
   @@index([parentId])
   @@map("locations")
+}
+
+/// A deliberately small operating area. Zones are the unit used to price and
+/// promise campus delivery; they are not a nationwide address abstraction.
+model DeliveryZone {
+  id                 String   @id @default(uuid()) @db.Uuid
+  locationId         String   @unique @map("location_id") @db.Uuid
+  name               String   @db.VarChar(120)
+  deliveryFee        Decimal  @default(0) @map("delivery_fee") @db.Decimal(12, 2)
+  promisedMinutes    Int      @default(60) @map("promised_minutes")
+  cutoffHour         Int?     @map("cutoff_hour")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  location           Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  deliveryTasks      DeliveryTask[]
+
+  @@index([isActive])
+  @@map("delivery_zones")
 }
 
 model Store {
@@ -271,6 +294,7 @@ model Product {
   reviews       Review[]
   wishlistItems WishlistItem[]
   promotions   PromotionProduct[]
+  conversations Conversation[]
 
   @@unique([storeId, slug])
   @@index([sellerId])
@@ -335,12 +359,16 @@ model Order {
   status          OrderStatus @default(PENDING)
   subtotal        Decimal     @db.Decimal(12, 2)
   shippingCost    Decimal     @default(0) @map("shipping_cost") @db.Decimal(12, 2)
+  platformFee     Decimal     @default(0) @map("platform_fee") @db.Decimal(12, 2)
+  sellerPayout    Decimal     @default(0) @map("seller_payout") @db.Decimal(12, 2)
   tax             Decimal     @default(0) @db.Decimal(12, 2)
   total           Decimal     @db.Decimal(12, 2)
   currency        String      @default("GHS") @db.VarChar(3)
   shippingAddress Json        @map("shipping_address")
   notes           String?
   trackingNumber  String?     @map("tracking_number") @db.VarChar(100)
+  pickupCode      String?     @unique @map("pickup_code") @db.VarChar(16)
+  fulfillmentMethod FulfillmentMethod @default(PICKUP) @map("fulfillment_method")
   completedAt     DateTime?   @map("completed_at")
   cancelledAt     DateTime?   @map("cancelled_at")
   cancelReason    String?     @map("cancel_reason")
@@ -355,6 +383,8 @@ model Order {
   promotionId    String?       @map("promotion_id") @db.Uuid
   promotion      Promotion?    @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   reviews         Review[]
+  deliveryTask    DeliveryTask?
+  settlement      SellerSettlement?
 
   @@index([buyerId])
   @@index([sellerId])
@@ -364,6 +394,57 @@ model Order {
   @@index([orderNumber])
   @@index([promotionId])
   @@map("orders")
+}
+
+/// An internal, append-only settlement ledger. It records what the marketplace
+/// owes a seller; it does not pretend that SmartShop is a wallet or escrow.
+model SellerSettlement {
+  id          String           @id @default(uuid()) @db.Uuid
+  orderId     String           @unique @map("order_id") @db.Uuid
+  sellerId    String           @map("seller_id") @db.Uuid
+  amount      Decimal          @db.Decimal(12, 2)
+  currency    String           @default("GHS") @db.VarChar(3)
+  status      SettlementStatus @default(HELD)
+  availableAt DateTime         @map("available_at")
+  paidAt      DateTime?        @map("paid_at")
+  paidBy      String?          @map("paid_by") @db.Uuid
+  providerRef String?          @map("provider_ref") @db.VarChar(255)
+  note        String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  order       Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  seller      User             @relation("SettlementSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@index([sellerId, status, availableAt])
+  @@index([status, availableAt])
+  @@map("seller_settlements")
+}
+
+/// A delivery task exists only for a paid campus-delivery order. It gives the
+/// operations team an auditable hand-off from seller to runner to buyer.
+model DeliveryTask {
+  id                 String         @id @default(uuid()) @db.Uuid
+  orderId            String         @unique @map("order_id") @db.Uuid
+  zoneId             String         @map("zone_id") @db.Uuid
+  status             DeliveryStatus @default(UNASSIGNED)
+  runnerId           String?        @map("runner_id") @db.Uuid
+  pickupProofUrl     String?        @map("pickup_proof_url") @db.VarChar(500)
+  deliveryProofUrl   String?        @map("delivery_proof_url") @db.VarChar(500)
+  deliveryNote       String?        @map("delivery_note")
+  promisedBy         DateTime       @map("promised_by")
+  assignedAt         DateTime?      @map("assigned_at")
+  pickedUpAt         DateTime?      @map("picked_up_at")
+  deliveredAt        DateTime?      @map("delivered_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  order              Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  zone               DeliveryZone   @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  runner             User?          @relation("DeliveryRunner", fields: [runnerId], references: [id])
+
+  @@index([status, promisedBy])
+  @@index([runnerId, status])
+  @@index([zoneId, status])
+  @@map("delivery_tasks")
 }
 
 model OrderItem {
@@ -470,6 +551,26 @@ model Subscription {
   @@map("subscriptions")
 }
 
+model SubscriptionPayment {
+  id            String             @id @default(uuid()) @db.Uuid
+  userId        String             @map("user_id") @db.Uuid
+  plan          SubscriptionPlan
+  amount        Decimal            @db.Decimal(12, 2)
+  currency      String             @default("GHS") @db.VarChar(3)
+  status        PaymentStatus      @default(PENDING)
+  providerRef   String             @unique @map("provider_ref") @db.VarChar(255)
+  providerData  Json?              @map("provider_data")
+  failureReason String?            @map("failure_reason")
+  completedAt   DateTime?          @map("completed_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([createdAt])
+  @@map("subscription_payments")
+}
+
 model SubscriptionOffering {
   id                    String           @id @default(uuid()) @db.Uuid
   tier                  SubscriptionPlan @map("tier")
@@ -556,6 +657,7 @@ model Conversation {
   lastMessageAt DateTime?                 @map("last_message_at")
   createdAt     DateTime                  @default(now()) @map("created_at")
   updatedAt     DateTime                  @updatedAt @map("updated_at")
+  product       Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
   participants  ConversationParticipant[]
   messages      Message[]
 
@@ -569,6 +671,7 @@ model ConversationParticipant {
   conversationId String       @map("conversation_id") @db.Uuid
   userId         String       @map("user_id") @db.Uuid
   lastReadAt     DateTime?    @map("last_read_at")
+  lastEmailAt    DateTime?    @map("last_email_at")
   joinedAt       DateTime     @default(now()) @map("joined_at")
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -798,6 +901,7 @@ enum LocationType {
 enum UserRole {
   BUYER
   SELLER
+  RUNNER
   ADMIN
 }
 
@@ -850,6 +954,28 @@ enum PaymentMethod {
   CARD
   BANK_TRANSFER
   CASH_ON_DELIVERY
+}
+
+enum FulfillmentMethod {
+  PICKUP
+  CAMPUS_DELIVERY
+}
+
+enum DeliveryStatus {
+  UNASSIGNED
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  HELD
+  AVAILABLE
+  PAID
+  BLOCKED
+  REVERSED
 }
 
 enum PromotionType {
