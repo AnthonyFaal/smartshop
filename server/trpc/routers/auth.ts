@@ -6,6 +6,7 @@ import {
   withErrorHandling,
 } from "@/server/trpc/init";
 import * as authService from "@/server/services/auth.service";
+import { Errors } from "@/server/errors";
 import { prisma } from "@/lib/db/prisma";
 import { createNotification } from "@/lib/notifications/service";
 import { getPaymentProvider } from "@/lib/payments/provider";
@@ -107,6 +108,7 @@ export const authRouter = createTRPCRouter({
     )
     .mutation(async ({ input, ctx }) => {
       const { acceptTerms: _acceptTerms, ...registerInput } = input;
+      void _acceptTerms;
       const result = await authService.registerUser({
         ...registerInput,
         userAgent: ctx.userAgent,
@@ -422,7 +424,7 @@ sellerVerificationUpsertSelfieFrame: protectedProcedure
     )
     .mutation(async ({ input }) => {
       const user = await prisma.user.findFirst({ where: { email: input.email.toLowerCase(), deletedAt: null } });
-      if (!user) throw new Error("Invalid verification request");
+      if (!user) throw Errors.badRequest("Invalid verification request.");
 
       await authService.verifyOtp({
         phone: input.email,

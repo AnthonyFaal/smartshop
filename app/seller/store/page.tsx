@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc/client";
+import { getUserMessage } from "@/lib/errors/user-message";
 import { StoreShareButton } from "@/components/store/store-share-button";
 
 type StoreForm = {
@@ -54,9 +55,7 @@ const initialForm: StoreForm = {
 
 
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+const getErrorMessage = getUserMessage;
 
 export default function SellerStorePage() {
   const utils = trpc.useUtils();

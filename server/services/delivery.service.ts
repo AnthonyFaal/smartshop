@@ -37,7 +37,7 @@ export async function createDeliveryTaskForPaidOrder(orderId: string) {
   if (!order || order.fulfillmentMethod !== "CAMPUS_DELIVERY") return null;
 
   const locationId = (order.shippingAddress as Record<string, unknown>).fulfillmentLocationId;
-  if (typeof locationId !== "string") throw new Error("Campus delivery order has no fulfillment location");
+  if (typeof locationId !== "string") throw Errors.badRequest("Choose a campus delivery zone.");
   const quote = await getFulfillmentQuote("CAMPUS_DELIVERY", locationId);
   if (!quote.zone || !quote.promisedBy) return null;
 

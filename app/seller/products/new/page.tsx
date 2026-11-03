@@ -20,6 +20,7 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc/client";
 import { canUseAiFeatures } from "@/lib/config/subscriptions";
+import { getUserMessage } from "@/lib/errors/user-message";
 
 /* -----------------------------
    SKU GENERATOR
@@ -36,9 +37,7 @@ function generateSku(title: string, storeId?: string) {
   return `${shortStore}-${clean}-${timestamp}`;
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+const getErrorMessage = getUserMessage;
 
 /* -----------------------------
    FORM TYPES & CONSTANTS

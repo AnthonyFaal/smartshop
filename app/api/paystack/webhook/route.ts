@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { Errors } from "@/server/errors";
 import { settlePayment } from "@/server/services/order.service";
+import { apiErrorResponse } from "@/lib/http/errors";
 
 // Paystack sends webhook payloads with content-type application/json
 // and X-Paystack-Signature header.
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
     const paystackSignature = req.headers.get("x-paystack-signature") ?? "";
     const expectedSecret = process.env.PAYSTACK_WEBHOOK_SECRET;
     if (!expectedSecret) {
-      throw Errors.badRequest("Missing PAYSTACK_WEBHOOK_SECRET");
+      throw Errors.serviceUnavailable("Payment processing is temporarily unavailable.");
     }
 
 
@@ -91,10 +92,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json(
-      { ok: false, message: e instanceof Error ? e.message : "Unknown" },
-      { status: 500 }
-    );
+    return apiErrorResponse(e, "paystack webhook", "Payment processing could not be completed.");
   }
 }
 

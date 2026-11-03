@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc/client";
@@ -130,7 +131,7 @@ export default function RegisterPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" autoComplete="new-password" {...register("password")} aria-invalid={!!errors.password} />
+                <PasswordInput id="password" autoComplete="new-password" {...register("password")} aria-invalid={!!errors.password} />
                 {errors.password && (
                   <p className="text-sm text-red-600" role="alert">{errors.password.message}</p>
                 )}

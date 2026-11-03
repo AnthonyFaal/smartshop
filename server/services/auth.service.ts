@@ -123,7 +123,7 @@ export async function loginUser(input: {
   });
 
   if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
-    throw Errors.unauthorized();
+    throw Errors.invalidCredentials();
   }
 
   if (!user.isActive || user.isSuspended) {

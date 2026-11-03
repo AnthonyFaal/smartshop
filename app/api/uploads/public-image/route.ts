@@ -4,6 +4,8 @@ import { uploadPublicImage, deleteFile, getBucketForFileType } from "@/lib/stora
 import { env } from "@/lib/config/env";
 import { getSessionUser } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/middleware/rate-limit";
+import { apiErrorResponse } from "@/lib/http/errors";
+import { Errors } from "@/server/errors";
 
 export const runtime = "nodejs";
 
@@ -14,9 +16,9 @@ const uploadSchema = z.object({
 
 export async function POST(req: Request) {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Please sign in to continue.", code: "UNAUTHORIZED" }, { status: 401 });
   const limit = await checkRateLimit(user.id, "public-upload", 20, 60_000);
-  if (!limit.allowed) return NextResponse.json({ error: "Too many uploads. Please try again shortly." }, { status: 429 });
+  if (!limit.allowed) return NextResponse.json({ error: "Too many uploads. Please try again shortly.", code: "RATE_LIMITED" }, { status: 429 });
   const formData = await req.formData();
 
   const file = formData.get("file");
@@ -62,12 +64,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ publicUrl, bucket, storageKey });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Upload failed";
-    const status = message.includes("not configured") ? 503 : 500;
-    return NextResponse.json(
-      { error: message },
-      { status }
-    );
+    if (e instanceof Error && e.message.includes("not configured")) {
+      return apiErrorResponse(
+        Errors.serviceUnavailable("Image uploads are temporarily unavailable. Please try again."),
+        "public-image upload"
+      );
+    }
+    return apiErrorResponse(e, "public-image upload", "We could not upload that image. Please try again.");
   }
 }
 
@@ -78,7 +81,7 @@ const deleteSchema = z.object({
 
 export async function DELETE(req: Request) {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "Please sign in to continue.", code: "UNAUTHORIZED" }, { status: 401 });
 
   const body = await req.json().catch(() => null);
   const parsed = deleteSchema.safeParse(body);
@@ -90,8 +93,13 @@ export async function DELETE(req: Request) {
     await deleteFile(parsed.data.bucket, parsed.data.storageKey);
     return NextResponse.json({ success: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Delete failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (e instanceof Error && e.message.includes("not configured")) {
+      return apiErrorResponse(
+        Errors.serviceUnavailable("Image uploads are temporarily unavailable. Please try again."),
+        "public-image delete"
+      );
+    }
+    return apiErrorResponse(e, "public-image delete", "We could not remove that image. Please try again.");
   }
 }
 
