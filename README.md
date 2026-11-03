@@ -20,40 +20,25 @@ Buying locally should not mean guessing whether a seller is real, an item is ava
 
 ## Product preview
 
-The repository includes a short, privacy-safe walkthrough recorded against the local development environment. It covers the public landing and marketplace surfaces, then signs in with the seeded seller account to show the seller workspace. It deliberately excludes payment submission and identity-document views.
-
-[Watch the local product walkthrough](docs/assets/demo.webm)
-
-![SmartShop home page](docs/assets/home.png)
+The screenshots below are captured from `http://localhost:3000` with development seed data. They show the buyer journey and the administrator’s operational controls; no payment is submitted and no identity document is opened.
 
 ![SmartShop marketplace](docs/assets/marketplace.png)
 
-![SmartShop seller dashboard](docs/assets/seller-dashboard.png)
+![SmartShop product view](docs/assets/buyer-product.png)
 
-![SmartShop seller inventory](docs/assets/seller-inventory.png)
+![SmartShop administrator dashboard](docs/assets/admin-dashboard.png)
 
-For a future external launch, add the remaining assets below; they tell the product story better than a large gallery of isolated screens.
+![SmartShop fulfilment and payout operations](docs/assets/admin-operations.png)
 
-| Asset | Capture this exact state | Suggested file |
-| --- | --- | --- |
-| Hero screenshot | Desktop home page, showing the UMaT positioning and primary buyer/seller actions | `docs/assets/home.png` |
-| Buyer journey | Mobile marketplace/product page with a verified-seller badge, price in GHS, stock, and add-to-cart action | `docs/assets/buyer-product.png` |
-| Checkout | Desktop checkout with a populated order, a pickup/delivery choice, and the transparent total breakdown; use mock data only | `docs/assets/checkout.png` |
-| Seller workflow | Seller dashboard with realistic product, order, balance, and verification status data | `docs/assets/seller-dashboard.png` |
-| Trust operations | Admin verification or fulfilment/settlement queue with all personal document data redacted | `docs/assets/admin-operations.png` |
-| Demo video | A 60–90 second silent, captioned walkthrough: browse → add to cart → delivery/pickup choice → payment handoff → seller fulfils order → admin verifies seller | `docs/assets/demo.gif` or a linked YouTube/Loom video |
+![SmartShop subscription controls](docs/assets/admin-subscriptions.png)
 
-When the remaining files exist, add them alongside the current previews:
+The presentation deliberately uses development fixtures only. Before sharing externally, remove personal details, payment references, delivery addresses, Ghana Card images, selfie images, and any production customer data.
 
-```md
-![SmartShop buyer marketplace](docs/assets/buyer-product.png)
+Regenerate the local assets while the application is running on port 3000:
 
-![SmartShop seller dashboard](docs/assets/seller-dashboard.png)
-
-[Watch the 90-second product walkthrough](REPLACE_WITH_DEMO_URL)
+```bash
+node scripts/capture-demo.mjs
 ```
-
-Do not use customer names, phone numbers, addresses, Ghana Card images, selfies, payment references, or real order data in screenshots or recordings. Use development seed data and scrub identifiers before recording.
 
 ## Architecture
 
