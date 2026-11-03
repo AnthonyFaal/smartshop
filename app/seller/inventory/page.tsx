@@ -11,10 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc/client";
+import { getUserMessage } from "@/lib/errors/user-message";
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+const getErrorMessage = getUserMessage;
 
 export default function SellerInventoryPage() {
   const utils = trpc.useUtils();

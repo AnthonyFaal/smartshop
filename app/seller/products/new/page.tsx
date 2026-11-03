@@ -20,6 +20,7 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc/client";
 import { canUseAiFeatures } from "@/lib/config/subscriptions";
+import { getUserMessage } from "@/lib/errors/user-message";
 
 /* -----------------------------
    SKU GENERATOR
@@ -36,9 +37,7 @@ function generateSku(title: string, storeId?: string) {
   return `${shortStore}-${clean}-${timestamp}`;
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+const getErrorMessage = getUserMessage;
 
 /* -----------------------------
    FORM TYPES & CONSTANTS
@@ -325,7 +324,7 @@ export default function SellerProductNewPage() {
     const uploadedFiles: Array<{ bucket: string; storageKey: string; publicUrl: string }> = [];
     let uploadedImageUrls: string[] = [];
     let images: string[] = [];
-    let sizesQuantities = noSizes
+    const sizesQuantities = noSizes
       ? undefined
       : variants
           .filter((v) => v.size.trim() !== "")
@@ -389,7 +388,8 @@ export default function SellerProductNewPage() {
         description: form.description,
         price: Number(form.price),
         comparePrice: form.comparePrice ? Number(form.comparePrice) : undefined,
-        stock: noSizes ? 1 : Number(form.stock), // server requires stock; variants-mode ignores it but keeps schema happy
+        // Simple mode uses this value; variant mode ignores it (server sets stock to 0 and uses variants)
+        stock: Number(form.stock),
         sizesQuantities,
         images: images.length > 0 ? images : ["https://placehold.co/600x600/png"],
         tags: form.tags

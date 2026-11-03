@@ -7,7 +7,7 @@ import {
 import { SubscriptionPlan } from "@prisma/client";
 
 export async function getSellerDashboardData(userId: string) {
-  const [user, store, productCount, products, orders] = await Promise.all([
+  const [user, store, productCount, products, orders, settlements] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -71,6 +71,7 @@ export async function getSellerDashboardData(userId: string) {
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
+    prisma.sellerSettlement.groupBy({ where: { sellerId: userId }, by: ["status"], _sum: { amount: true } }),
   ]);
 
   const plan = (user?.subscription?.plan ?? "FREE") as SubscriptionPlan;
@@ -84,13 +85,11 @@ export async function getSellerDashboardData(userId: string) {
       if (["COMPLETED", "DELIVERED"].includes(order.status)) {
         acc.completedRevenue += value;
       }
-      if (["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED"].includes(order.status)) {
-        acc.pendingEscrow += value;
-      }
       return acc;
     },
-    { completedRevenue: 0, pendingEscrow: 0 }
+    { completedRevenue: 0 }
   );
+  const settlementTotals = Object.fromEntries(settlements.map((row) => [row.status, Number(row._sum.amount ?? 0)]));
 
   const today = new Date();
   const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -121,8 +120,8 @@ export async function getSellerDashboardData(userId: string) {
       : null,
     metrics: {
       totalRevenue: totals.completedRevenue,
-      pendingEscrow: totals.pendingEscrow,
-      availableBalance: Math.max(0, totals.completedRevenue - totals.pendingEscrow),
+      pendingEscrow: settlementTotals.HELD ?? 0,
+      availableBalance: settlementTotals.AVAILABLE ?? 0,
       ordersToday,
       productsLive: activeProducts,
       conversionRate,

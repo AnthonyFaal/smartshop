@@ -74,6 +74,7 @@ export async function seedSubscriptionOfferings() {
       data: {
         name: offering.name,
         version: offering.version,
+        priceGhs: offering.priceGhs,
         maxProducts: offering.maxProducts,
         aiTier: offering.aiTier,
         analytics: offering.analytics,
@@ -94,26 +95,29 @@ export async function seedSubscriptionOfferings() {
  * CATEGORIES (STATIC)
  */
 export async function seedCategories() {
-  return prisma.category.createMany({
-    data: [
-      { name: "Electronics", slug: "electronics", sortOrder: 1 },
-      { name: "Books & Stationery", slug: "books-stationery", sortOrder: 2 },
-      { name: "Fashion", slug: "fashion", sortOrder: 3 },
-      { name: "Food & Beverages", slug: "food-beverages", sortOrder: 4 },
-      { name: "Home & Living", slug: "home-living", sortOrder: 5 },
-      { name: "Beauty & Personal Care", slug: "beauty-personal-care", sortOrder: 6 },
-      { name: "Sports & Fitness", slug: "sports-fitness", sortOrder: 7 },
-      { name: "Automotive", slug: "automotive", sortOrder: 8 },
-      { name: "Babies & Kids", slug: "babies-kids", sortOrder: 9 },
-      { name: "Software & Digital", slug: "software-digital", sortOrder: 10 },
-      { name: "Agriculture", slug: "agriculture", sortOrder: 11 },
-      { name: "Health & Wellness", slug: "health-wellness", sortOrder: 12 },
-      { name: "Services", slug: "services", sortOrder: 13 },
-      { name: "Groceries", slug: "groceries", sortOrder: 14 },
-      { name: "Gaming & Entertainment", slug: "gaming-entertainment", sortOrder: 15 },
-    ],
-    skipDuplicates: true,
-  });
+  // The pilot deliberately trades catalogue breadth for trust and operational
+  // control. Inactive categories stay in the database for later review but
+  // cannot be listed or surfaced publicly.
+  const categories = [
+    { name: "Books & Stationery", slug: "books-stationery", sortOrder: 1, isActive: true },
+    { name: "Fashion & Accessories", slug: "fashion", sortOrder: 2, isActive: true },
+    { name: "Hostel Essentials", slug: "home-living", sortOrder: 3, isActive: true },
+    { name: "Beauty & Personal Care", slug: "beauty-personal-care", sortOrder: 4, isActive: true },
+    { name: "Phone Accessories", slug: "electronics", sortOrder: 5, isActive: true },
+    { name: "Food & Beverages", slug: "food-beverages", sortOrder: 6, isActive: false },
+    { name: "Sports & Fitness", slug: "sports-fitness", sortOrder: 7, isActive: false },
+    { name: "Automotive", slug: "automotive", sortOrder: 8, isActive: false },
+    { name: "Babies & Kids", slug: "babies-kids", sortOrder: 9, isActive: false },
+    { name: "Software & Digital", slug: "software-digital", sortOrder: 10, isActive: false },
+    { name: "Agriculture", slug: "agriculture", sortOrder: 11, isActive: false },
+    { name: "Health & Wellness", slug: "health-wellness", sortOrder: 12, isActive: false },
+    { name: "Services", slug: "services", sortOrder: 13, isActive: false },
+    { name: "Groceries", slug: "groceries", sortOrder: 14, isActive: false },
+    { name: "Gaming & Entertainment", slug: "gaming-entertainment", sortOrder: 15, isActive: false },
+  ];
+  await Promise.all(categories.map((category) => prisma.category.upsert({
+    where: { slug: category.slug }, update: category, create: category,
+  })));
 }
 
 /**
@@ -379,4 +383,30 @@ export async function seedLocations() {
     tarkwa,
     umatZone,
   };
+}
+
+/**
+ * Pilot fulfilment is intentionally constrained to staffed UMaT zones. Prices
+ * are explicit so the delivery unit economics can be reviewed weekly.
+ */
+export async function seedPilotDeliveryZones() {
+  const zones = [
+    { slug: "umat-main-gate", name: "UMaT Main Gate", deliveryFee: 5, promisedMinutes: 45 },
+    { slug: "umat-hostels", name: "UMaT Hostels", deliveryFee: 7, promisedMinutes: 60 },
+    { slug: "umat-lecture-zone", name: "UMaT Lecture Halls", deliveryFee: 5, promisedMinutes: 45 },
+    { slug: "umat-back-gate", name: "UMaT Back Gate", deliveryFee: 7, promisedMinutes: 60 },
+  ];
+  for (const zone of zones) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { slug: zone.slug } });
+    const zoneData = {
+      name: zone.name,
+      deliveryFee: zone.deliveryFee,
+      promisedMinutes: zone.promisedMinutes,
+    };
+    await prisma.deliveryZone.upsert({
+      where: { locationId: location.id },
+      create: { locationId: location.id, ...zoneData },
+      update: { ...zoneData, isActive: true },
+    });
+  }
 }

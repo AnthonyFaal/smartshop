@@ -38,3 +38,8 @@ export function generateOrderNumber(): string {
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `SS-${timestamp}-${random}`;
 }
+
+/** Short code the buyer shows at a staffed pickup point. Not an authentication factor. */
+export function generatePickupCode(): string {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}

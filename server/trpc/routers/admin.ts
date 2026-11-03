@@ -10,6 +10,7 @@ import { calculateTrustScore } from "@/server/services/trust.service";
 import { createNotification } from "@/lib/notifications/service";
 import { getPlanLimits } from "@/lib/config/subscriptions";
 import { SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
+import { getPilotScorecard } from "@/server/services/pilot-analytics.service";
 
 async function syncSubscriptionOfferingsForAdmin() {
   const defaults = (await import("@/lib/config/subscriptions")).getDefaultSubscriptionOfferings();
@@ -76,6 +77,10 @@ async function syncSubscriptionOfferingsForAdmin() {
 }
 
 export const adminRouter = createTRPCRouter({
+  pilotScorecard: adminProcedure
+    .use(withErrorHandling)
+    .input(z.object({ days: z.number().int().min(7).max(90).optional() }).optional())
+    .query(({ input }) => getPilotScorecard(input?.days ?? 30)),
   subscriptionOfferings: adminProcedure
     .use(withErrorHandling)
     .query(async () => {
@@ -1020,6 +1025,52 @@ export const adminRouter = createTRPCRouter({
         channels: ["IN_APP", "EMAIL"],
       });
 
+      return { success: true };
+    }),
+
+  storeVerificationQueue: adminProcedure
+    .use(withErrorHandling)
+    .query(() => prisma.store.findMany({
+      where: { deletedAt: null, verificationStatus: { in: ["PENDING", "UNDER_REVIEW"] } },
+      orderBy: { updatedAt: "asc" },
+      select: {
+        id: true, name: true, slug: true, address: true, city: true, region: true,
+        verificationStatus: true, createdAt: true, updatedAt: true,
+        location: { select: { name: true, region: true } },
+        owner: { select: { id: true, email: true, sellerVerification: { select: { status: true } }, profile: { select: { displayName: true } } } },
+      },
+    })),
+
+  approveStore: adminProcedure
+    .use(withErrorHandling)
+    .input(z.object({ storeId: z.string().uuid(), notes: z.string().trim().max(1_000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const store = await prisma.store.findUnique({
+        where: { id: input.storeId }, select: { id: true, ownerId: true, name: true, verificationStatus: true, owner: { select: { sellerVerification: { select: { status: true } } } } },
+      });
+      if (!store) throw Errors.notFound("Store");
+      if (store.owner.sellerVerification?.status !== "APPROVED") throw Errors.badRequest("Approve the seller identity before approving this store.");
+      if (!["PENDING", "UNDER_REVIEW"].includes(store.verificationStatus)) throw Errors.badRequest("This store is not awaiting review.");
+      await prisma.$transaction([
+        prisma.store.update({ where: { id: store.id }, data: { verificationStatus: "VERIFIED", verifiedAt: new Date(), verifiedBy: ctx.user.id } }),
+        prisma.auditLog.create({ data: { userId: ctx.user.id, action: "APPROVE", entityType: "Store", entityId: store.id, newValues: { notes: input.notes ?? null } } }),
+      ]);
+      await createNotification({ userId: store.ownerId, type: "VERIFICATION", title: "Store location approved", body: `${store.name} is publicly available again.`, data: { storeId: store.id } });
+      return { success: true };
+    }),
+
+  rejectStore: adminProcedure
+    .use(withErrorHandling)
+    .input(z.object({ storeId: z.string().uuid(), reason: z.string().trim().min(10).max(1_000) }))
+    .mutation(async ({ ctx, input }) => {
+      const store = await prisma.store.findUnique({ where: { id: input.storeId }, select: { id: true, ownerId: true, name: true, verificationStatus: true } });
+      if (!store) throw Errors.notFound("Store");
+      if (!["PENDING", "UNDER_REVIEW"].includes(store.verificationStatus)) throw Errors.badRequest("This store is not awaiting review.");
+      await prisma.$transaction([
+        prisma.store.update({ where: { id: store.id }, data: { verificationStatus: "REJECTED", verifiedAt: null, verifiedBy: null } }),
+        prisma.auditLog.create({ data: { userId: ctx.user.id, action: "REJECT", entityType: "Store", entityId: store.id, newValues: { reason: input.reason } } }),
+      ]);
+      await createNotification({ userId: store.ownerId, type: "VERIFICATION", title: "Store location needs changes", body: input.reason, data: { storeId: store.id } });
       return { success: true };
     }),
 

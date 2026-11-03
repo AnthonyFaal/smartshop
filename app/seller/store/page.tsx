@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc/client";
+import { getUserMessage } from "@/lib/errors/user-message";
+import { StoreShareButton } from "@/components/store/store-share-button";
 
 type StoreForm = {
   name: string;
@@ -53,9 +55,7 @@ const initialForm: StoreForm = {
 
 
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+const getErrorMessage = getUserMessage;
 
 export default function SellerStorePage() {
   const utils = trpc.useUtils();
@@ -447,9 +447,10 @@ export default function SellerStorePage() {
                             </p>
                           </div>
                         </div>
-                        <Button asChild variant="outline" size="sm" className="mt-4">
-                          <Link href={`/seller/store/settings?storeId=${store.id}`}>Edit settings</Link>
-                        </Button>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button asChild variant="outline" size="sm"><Link href={`/seller/store/settings?storeId=${store.id}`}>Edit settings</Link></Button>
+                          {store.verificationStatus === "VERIFIED" ? <><Button asChild variant="outline" size="sm"><Link href={`/stores/${store.slug}`} target="_blank">View public store</Link></Button><StoreShareButton slug={store.slug} name={store.name} /></> : <span className="self-center text-xs text-zinc-500">Your store link becomes shareable after approval.</span>}
+                        </div>
                       </div>
                     ))}
                   </div>

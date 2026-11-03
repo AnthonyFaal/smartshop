@@ -17,6 +17,17 @@ const ACCESS_COOKIE_MAX_AGE = 15 * 60;
 const REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60;
 const MAX_SESSIONS_PER_USER = 5;
 
+// PostgreSQL is the session source of truth. Redis only accelerates ancillary
+// session lookups, so a transient cache outage must not leave a valid user
+// unable to sign in after the database transaction has succeeded.
+async function updateSessionCache(operation: () => Promise<unknown>): Promise<void> {
+  try {
+    await operation();
+  } catch (error) {
+    console.warn("[Session] Redis cache operation skipped", error instanceof Error ? error.message : String(error));
+  }
+}
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -47,7 +58,7 @@ export async function createSession(
       where: { id: { in: toRemove.map((s) => s.id) } },
     });
     for (const s of toRemove) {
-      await redis.del(cacheKeys.session(s.id));
+      await updateSessionCache(() => redis.del(cacheKeys.session(s.id)));
     }
   }
 
@@ -83,10 +94,12 @@ export async function createSession(
     role: user.role,
   });
 
-  await redis.setex(
-    cacheKeys.session(session.id),
-    REFRESH_COOKIE_MAX_AGE,
-    JSON.stringify({ userId: user.id, role: user.role })
+  await updateSessionCache(() =>
+    redis.setex(
+      cacheKeys.session(session.id),
+      REFRESH_COOKIE_MAX_AGE,
+      JSON.stringify({ userId: user.id, role: user.role })
+    )
   );
 
   return {
@@ -226,7 +239,7 @@ export async function destroySession(sessionId?: string): Promise<void> {
       const payload = await verifyRefreshToken(refreshToken);
       const id = sessionId ?? payload.sessionId;
       await prisma.session.delete({ where: { id } }).catch(() => {});
-      await redis.del(cacheKeys.session(id));
+      await updateSessionCache(() => redis.del(cacheKeys.session(id)));
     } catch {
       // Token invalid — clear cookies anyway
     }

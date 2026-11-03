@@ -6,6 +6,7 @@ import {
   FileText,
   LayoutDashboard,
   MessageSquare,
+  Truck,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -32,8 +33,10 @@ export const adminRoutes = {
   sellerReviews: "/admin/seller-reviews",
   sellerQueue: "/admin/seller-queue",
   verificationCenter: "/admin/verification-center",
+  storeApprovals: "/admin/store-approvals",
   subscriptions: "/admin/subscriptions",
   analytics: "/admin/analytics",
+  operations: "/admin/operations",
   disputes: "/admin/disputes",
   settings: "/admin/settings",
 } as const;
@@ -67,11 +70,25 @@ export const adminNavItems: readonly AdminNavItem[] = [
     permission: "manageVerification",
   },
   {
+    id: "store-approvals",
+    title: "Store Locations",
+    href: adminRoutes.storeApprovals,
+    icon: BadgeCheck,
+    permission: "manageVerification",
+  },
+  {
     id: "subscriptions",
     title: "Subscriptions",
     href: adminRoutes.subscriptions,
     icon: CreditCard,
     permission: "manageSubscriptions",
+  },
+  {
+    id: "operations",
+    title: "Fulfilment & Payouts",
+    href: adminRoutes.operations,
+    icon: Truck,
+    permission: "manageDisputes",
   },
   {
     id: "analytics",

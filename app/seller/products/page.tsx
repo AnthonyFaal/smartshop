@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { trpc } from "@/lib/trpc/client";
+import { getUserMessage } from "@/lib/errors/user-message";
 
 type ProductStatus =
   | "DRAFT"
@@ -48,9 +49,7 @@ const statusStyles: Record<ProductStatus, string> = {
   ARCHIVED: "bg-slate-100 text-slate-700 ring-slate-200",
 };
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+const getErrorMessage = getUserMessage;
 
 function formatStatus(status: ProductStatus) {
   return status

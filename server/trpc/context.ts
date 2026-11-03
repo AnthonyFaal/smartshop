@@ -1,6 +1,7 @@
 import { getSessionUser, type SessionUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { checkRateLimit } from "@/lib/middleware/rate-limit";
+import { Errors } from "@/server/errors";
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 
 export interface TRPCContext {
@@ -22,7 +23,7 @@ export async function createTRPCContext(
 
   const rateLimit = await checkRateLimit(ip, "trpc");
   if (!rateLimit.allowed) {
-    throw new Error("Rate limit exceeded");
+    throw Errors.rateLimited();
   }
 
   return { user, prisma, ip, userAgent };

@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { reportError } from "@/lib/monitoring";
 
 export class AppError extends Error {
   constructor(
@@ -10,6 +11,15 @@ export class AppError extends Error {
     super(message);
     this.name = "AppError";
   }
+}
+
+/**
+ * Errors deliberately raised for an expected product flow. Their messages are
+ * safe to show to a customer; unexpected errors are always replaced with a
+ * generic message before crossing an API boundary.
+ */
+export function isAppError(error: unknown): error is AppError {
+  return error instanceof AppError;
 }
 
 function getFriendlyMessageFromTRPCCode(code: TRPCError["code"]): string {
@@ -62,14 +72,18 @@ export function toTRPCError(error: unknown): TRPCError {
   }
 
   if (error instanceof TRPCError) {
+    const message = error.message?.trim();
     return new TRPCError({
       code: error.code,
-      message: error.message?.trim() || getFriendlyMessageFromTRPCCode(error.code),
+      message:
+        !message || message === error.code
+          ? getFriendlyMessageFromTRPCCode(error.code)
+          : message,
       cause: undefined,
     });
   }
 
-  console.error("[Unhandled Error]", error);
+  reportError(error, { boundary: "trpc" });
   return new TRPCError({
     code: "INTERNAL_SERVER_ERROR",
     message: "Something went wrong. Please try again.",
@@ -78,9 +92,16 @@ export function toTRPCError(error: unknown): TRPCError {
 
 
 export const Errors = {
+  /** Use only when a signed-in session is required. */
+  authenticationRequired: () =>
+    new AppError("Please sign in to continue.", "UNAUTHORIZED", 401),
+  /** Do not reveal whether an account exists or which credential was wrong. */
+  invalidCredentials: () =>
+    new AppError("Email or password is incorrect.", "UNAUTHORIZED", 401),
+  // Kept as a compatibility alias while call sites migrate to the precise name.
   unauthorized: () =>
-    new AppError("Authentication required", "UNAUTHORIZED", 401),
-  forbidden: (msg = "Access denied") =>
+    new AppError("Please sign in to continue.", "UNAUTHORIZED", 401),
+  forbidden: (msg = "You don’t have permission to perform this action.") =>
     new AppError(msg, "FORBIDDEN", 403),
   notFound: (entity: string) =>
     new AppError(`${entity} not found`, "NOT_FOUND", 404),
@@ -88,7 +109,9 @@ export const Errors = {
   badRequest: (msg: string, details?: Record<string, unknown>) =>
     new AppError(msg, "BAD_REQUEST", 400, details),
   rateLimited: () =>
-    new AppError("Too many requests", "RATE_LIMITED", 429),
+    new AppError("Too many requests. Please try again in a moment.", "RATE_LIMITED", 429),
+  serviceUnavailable: (msg = "This service is temporarily unavailable. Please try again.") =>
+    new AppError(msg, "SERVICE_UNAVAILABLE", 503),
   subscriptionLimit: (msg: string) =>
     new AppError(msg, "SUBSCRIPTION_LIMIT", 403),
 };

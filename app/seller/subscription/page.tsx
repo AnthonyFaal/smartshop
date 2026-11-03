@@ -55,9 +55,10 @@ export default function SellerSubscriptionPage() {
   const { data: me, isLoading: meLoading } = trpc.auth.me.useQuery();
   const { data: plansData, isLoading: plansLoading } = trpc.auth.subscriptionPlans.useQuery();
   const checkout = trpc.auth.initializeSubscriptionCheckout.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await utils.auth.me.invalidate();
       await utils.auth.subscriptionPlans.invalidate();
+      if (result.redirectUrl) window.location.assign(result.redirectUrl);
     },
   });
 

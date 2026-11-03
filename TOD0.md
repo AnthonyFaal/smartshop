@@ -1,9 +1,0 @@
-- [ ] Update backend auth router to remove SellerVerification location fields usage (me select + Ghana card/selfie upserts; remove submitLocation mutation)
-- [ ] Update seller verification UI to remove Campus location step and related progress/status logic
-- [ ] Update Ghana card page UI to remove GhanaCardNumber input and send only ghanaCardFrontUrl
-- [ ] De-activate campus-location verify page (redirect/backward compatible)
-- [ ] Refactor Store tRPC router: list/select using verificationStatus; create requires address/city/region/country/latitude/longitude and sets verificationStatus=PENDING
-- [ ] Refactor Seller Store page UI: collect required store business + location + GPS; update badge logic from isVerified to verificationStatus
-- [ ] Add store settings page + endpoints with business/branding/location edit rules (address/GPS resets verificationStatus to PENDING; branding edits do not)
-- [ ] Migration script: move existing SellerVerification location data into first Store and remove location references from code
-- [ ] Project-wide reference cleanup + compile check (typecheck/lint)

@@ -1,6 +1,0 @@
-- [ ] Add fulfillment location dropdown on checkout (fetch from `trpc.location.search`)
-- [ ] Include selected location in `trpc.order.create` input
-- [ ] Return Paystack `redirectUrl` from `order.create` and redirect in checkout
-- [ ] Only initiate Paystack for `MOBILE_MONEY` and `CARD`; for `BANK_TRANSFER` and `CASH_ON_DELIVERY` store payment as PENDING without calling Paystack
-- [ ] Confirm totals/fee remain 2.5% marketplace fee
-- [ ] Run typecheck/lint/tests

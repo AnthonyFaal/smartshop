@@ -36,6 +36,10 @@ export async function listProducts(input: ProductListInput) {
   const where: Prisma.ProductWhereInput = {
     status: "ACTIVE",
     deletedAt: null,
+    // A public listing is a marketplace promise. Never expose inventory from a
+    // suspended, inactive, or still-unreviewed store.
+    store: { isActive: true, deletedAt: null, verificationStatus: "VERIFIED" },
+    category: { isActive: true },
     ...(input.categoryId && { categoryId: input.categoryId }),
     ...(input.storeId && { storeId: input.storeId }),
     ...(input.search?.trim() && {
@@ -197,7 +201,13 @@ export async function getProductBySlug(slug: string) {
 
 async function fetchProductById(id: string) {
   const product = await prisma.product.findFirst({
-    where: { id, deletedAt: null },
+    where: {
+      id,
+      deletedAt: null,
+      status: "ACTIVE",
+      store: { isActive: true, deletedAt: null, verificationStatus: "VERIFIED" },
+      category: { isActive: true },
+    },
     include: {
       store: {
         select: {
@@ -222,7 +232,7 @@ async function fetchProductById(id: string) {
     },
   });
 
-  if (product && product.status === "ACTIVE") {
+  if (product) {
     await prisma.product.update({
       where: { id },
       data: { viewCount: { increment: 1 } },
@@ -239,7 +249,13 @@ async function fetchProductById(id: string) {
 
 async function fetchProductBySlug(slug: string) {
   const product = await prisma.product.findFirst({
-    where: { slug, deletedAt: null },
+    where: {
+      slug,
+      deletedAt: null,
+      status: "ACTIVE",
+      store: { isActive: true, deletedAt: null, verificationStatus: "VERIFIED" },
+      category: { isActive: true },
+    },
     include: {
       store: {
         select: {
@@ -264,7 +280,7 @@ async function fetchProductBySlug(slug: string) {
     },
   });
 
-  if (product && product.status === "ACTIVE") {
+  if (product) {
     await prisma.product.update({
       where: { id: product.id },
       data: { viewCount: { increment: 1 } },
@@ -349,6 +365,9 @@ export async function createProduct(
     where: { id: input.storeId, ownerId: sellerId, deletedAt: null },
   });
   if (!store) throw Errors.notFound("Store");
+  if (!store.isActive || store.verificationStatus !== "VERIFIED") {
+    throw Errors.forbidden("Your store must be approved before products can be published.");
+  }
 
   const subscription = await prisma.subscription.findUnique({
     where: { userId: sellerId },
@@ -365,6 +384,12 @@ export async function createProduct(
   if (!resolvedCategoryId) {
     throw Errors.badRequest("No product category is available yet.");
   }
+
+  const category = await prisma.category.findFirst({
+    where: { id: resolvedCategoryId, isActive: true },
+    select: { id: true },
+  });
+  if (!category) throw Errors.badRequest("This category is not available in the pilot.");
 
   const productCount = await prisma.product.count({
     where: { sellerId, deletedAt: null },
@@ -645,36 +670,19 @@ export async function updateVariantStocks(
     );
   }
 
-  // Update quantities
-  await prisma.productVariant.updateMany({
-    // Prisma updateMany doesn't support per-row values, so do sequential updates.
-    // Kept small since inventory edits are per-variant.
-     
-    where: { id: { in: providedIds } },
-    data: { quantity: 0 },
-  });
-
-  // Above can't set differing quantities; redo with per-variant updates in transaction-like fashion.
-  // We do per-row updates to ensure correctness.
-  for (const v of normalized) {
-    await prisma.productVariant.update({
-      where: { id: v.id },
-      data: { quantity: v.quantity },
+  const { sum, newStatus } = await prisma.$transaction(async (tx) => {
+    // Each row has a distinct quantity. Updating them atomically avoids the
+    // previous transient "all stock is zero" state on partial failure.
+    await Promise.all(normalized.map((v) => tx.productVariant.update({
+      where: { id: v.id }, data: { quantity: v.quantity },
+    })));
+    const totalQuantity = await tx.productVariant.aggregate({
+      where: { productId }, _sum: { quantity: true },
     });
-  }
-
-  const totalQuantity = await prisma.productVariant.aggregate({
-    where: { productId },
-    _sum: { quantity: true },
-  });
-
-  const sum = totalQuantity._sum.quantity ?? 0;
-
-  const newStatus: ProductStatus = sum > 0 ? "ACTIVE" : "OUT_OF_STOCK";
-
-  await prisma.product.update({
-    where: { id: productId },
-    data: { status: newStatus },
+    const total = totalQuantity._sum.quantity ?? 0;
+    const status: ProductStatus = total > 0 ? "ACTIVE" : "OUT_OF_STOCK";
+    await tx.product.update({ where: { id: productId }, data: { status } });
+    return { sum: total, newStatus: status };
   });
 
   await cacheDelete(cacheKeys.product(productId));

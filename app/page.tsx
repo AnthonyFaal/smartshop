@@ -1,4 +1,4 @@
-import { Shield, Sparkles, MapPin, Star } from "lucide-react";
+import { Shield, MapPin, Star } from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { LandingHeroCTA, LandingBottomCTA } from "@/components/marketing/landing-cta";
 
@@ -8,12 +8,6 @@ const features = [
     title: "Verified Sellers",
     description:
       "Every seller passes Ghana Card and selfie verification before their store is marked VERIFIED.",
-  },
-  {
-    icon: Sparkles,
-    title: "AI-Powered Shopping",
-    description:
-      "Smart search, scam detection, deal alerts, and personalized recommendations.",
   },
   {
     icon: MapPin,
@@ -41,12 +35,12 @@ export default function LandingPage() {
                 Now live at UMaT Campus
               </div>
               <h1 className="text-4xl font-bold tracking-tight text-zinc-900 sm:text-6xl">
-                Ghana&apos;s marketplace,{" "}
-                <span className="text-emerald-600">built on trust</span>
+                Campus shopping,{" "}
+                <span className="text-emerald-600">without the runaround</span>
               </h1>
               <p className="mt-6 text-lg leading-8 text-zinc-600">
-                SmartShop connects verified buyers and sellers with AI assistance,
-                secure payments in GHS, and a trust system designed for local commerce.
+                Reserve essentials from verified nearby sellers, pay in GHS, and
+                collect from a known point or use staffed campus delivery.
               </p>
               <LandingHeroCTA />
             </div>
@@ -59,7 +53,7 @@ export default function LandingPage() {
               Why SmartShop?
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-center text-zinc-600">
-              Designed for Ghanaian commerce with enterprise-grade security and AI at every step.
+              Built for a reliable UMaT/Tarkwa pilot—not an unverified national catalogue.
             </p>
             <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
               {features.map((feature) => (

@@ -123,7 +123,7 @@ export async function loginUser(input: {
   });
 
   if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
-    throw Errors.unauthorized();
+    throw Errors.invalidCredentials();
   }
 
   if (!user.isActive || user.isSuspended) {
@@ -201,7 +201,6 @@ export async function sendEmailVerification(input: {
     channels: ["IN_APP"],
   });
 
-  console.info(`[Email Verification] Code for ${input.email}: ${code}`);
 }
 
 export async function sendOtp(input: {
@@ -235,7 +234,6 @@ export async function sendOtp(input: {
     });
   }
 
-  console.info(`[OTP] Code for ${input.phone} (${input.purpose}): ${code}`);
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
@@ -281,7 +279,6 @@ export async function requestPasswordReset(email: string): Promise<void> {
     channels: alternativeChannels,
   });
 
-  console.info(`[Password Reset] Code for ${email}: ${code}`);
 }
 
 export async function resendPasswordResetCode(email: string): Promise<{

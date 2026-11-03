@@ -11,6 +11,9 @@ import { locationRouter } from "@/server/trpc/routers/location";
 import { wishlistRouter } from "@/server/trpc/routers/wishlist";
 import { reviewRouter } from "@/server/trpc/routers/review";
 import { promotionRouter } from "@/server/trpc/routers/promotion";
+import { deliveryRouter } from "@/server/trpc/routers/delivery";
+import { settlementRouter } from "@/server/trpc/routers/settlement";
+import { disputeRouter } from "@/server/trpc/routers/dispute";
 
 export const appRouter = createTRPCRouter({
   auth: authRouter,
@@ -25,6 +28,9 @@ export const appRouter = createTRPCRouter({
   wishlist: wishlistRouter,
   review: reviewRouter,
   promotion: promotionRouter,
+  delivery: deliveryRouter,
+  settlement: settlementRouter,
+  dispute: disputeRouter,
 });
 
 

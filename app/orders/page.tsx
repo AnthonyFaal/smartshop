@@ -6,8 +6,11 @@ import { Footer } from "@/components/layout/footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc/client";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { toast } from "sonner";
+import { useState } from "react";
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   COMPLETED: "default",
@@ -22,6 +25,18 @@ const statusVariant: Record<string, "default" | "secondary" | "destructive" | "o
 
 export default function OrdersPage() {
   const { data, isLoading } = trpc.order.listBuyer.useQuery({ limit: 20 });
+  const utils = trpc.useUtils();
+  const [reportingOrderId, setReportingOrderId] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const openDispute = trpc.dispute.open.useMutation({
+    onSuccess: async () => {
+      await utils.dispute.mine.invalidate();
+      setReportingOrderId(null);
+      setReason("");
+      toast.success("Your issue has been submitted for review.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   return (
     <div className="flex min-h-full flex-col">
@@ -70,6 +85,17 @@ export default function OrdersPage() {
                       </span>
                     ))}
                   </div>
+                  {["DELIVERED", "COMPLETED"].includes(order.status) ? (
+                    <div className="mt-4 border-t border-zinc-100 pt-4">
+                      {reportingOrderId === order.id ? (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-zinc-900" htmlFor={`reason-${order.id}`}>What went wrong?</label>
+                          <textarea id={`reason-${order.id}`} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Describe the item or delivery issue. Include only facts that can be checked." className="min-h-24 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100" />
+                          <div className="flex gap-2"><Button size="sm" disabled={openDispute.isPending || reason.trim().length < 10} onClick={() => openDispute.mutate({ orderId: order.id, reason })}>Submit for review</Button><Button size="sm" variant="outline" onClick={() => { setReportingOrderId(null); setReason(""); }}>Cancel</Button></div>
+                        </div>
+                      ) : <Button size="sm" variant="outline" onClick={() => setReportingOrderId(order.id)}>Report an issue</Button>}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             ))}

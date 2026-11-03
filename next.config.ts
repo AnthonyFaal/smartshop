@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
 
+  allowedDevOrigins: [
+    'f791-154-161-79-59.ngrok-free.app',
+    '5606-154-161-79-59.ngrok-free.app',
+  ],
+
   images: {
     remotePatterns: [
       {
