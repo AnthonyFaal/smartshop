@@ -1,0 +1,14 @@
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+tRPC Error on auth.login: aborted
+[browser] Image with src "http://localhost:9000/smartshop-products/product-images/aOfXU_4geIkDM2rP7L2KA.webp" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+tRPC Error on wishlist.getDefaultWishlist: Please sign in to continue.
+[browser] Image with src "http://localhost:9000/smartshop-products/product-images/aOfXU_4geIkDM2rP7L2KA.webp" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+tRPC Error on wishlist.getDefaultWishlist: Please sign in to continue.
+[browser] Image with src "http://localhost:9000/smartshop-products/product-images/aOfXU_4geIkDM2rP7L2KA.webp" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+tRPC Error on wishlist.getDefaultWishlist: Please sign in to continue.
+tRPC Error on review.listProduct: Please sign in to continue.
+tRPC Error on wishlist.getDefaultWishlist: Please sign in to continue.
+tRPC Error on review.listProduct: Please sign in to continue.
